@@ -1,9 +1,21 @@
 # Project Coding Rules (Non-Obvious Only)
 
-- No `pyproject.toml` / `requirements.txt` yet — when adding dependencies, install with `pip install <pkg>` AND create/update a `requirements.txt` or `pyproject.toml` so the install is reproducible.
-- `google-adk` exposes both a CLI (`adk`) and a Python API under `google.adk.*`; prefer the Python API for agent logic, use the CLI only for serving.
-- `pydantic` v2 is installed — do NOT use v1 patterns (`@validator`, `class Config`, `.dict()`). Use `model_validator(mode='after')`, `model_config`, `.model_dump()`.
-- `tenacity` is available for retry logic; use it rather than writing manual retry loops.
-- `aiosqlite` is installed for async SQLite — use it instead of synchronous `sqlite3` in async contexts.
-- Tests use `pytest` 9.x; run a single test with `python -m pytest path/to/test.py::test_name` (must have venv active).
-- The `.remember/` directory is a session-memory plugin artifact — do not store application data there.
+- **Threshold single source**: `passline/qc/thresholds.py` is the only place numeric QC limits live. `corrupt.py` and `rules.py` both import from it. Adding a rule = add threshold there first.
+- **Math from model only**: `check_file()` in `rules.py` MUST use `cue.cps`, `cue.duration_ms`, `cue.char_counts` — never re-implement math inside the rule engine or fixer agent.
+- **CPS `measured_value` is full precision**: Do NOT round CPS values stored in `Finding.measured_value`. Must equal `cue.cps` exactly (property tests assert `abs(finding.measured_value - cue.cps) < 1e-6`).
+- **Corpus grading filter uses `(cue_index, rule)` pairs** not just `cue_index`. Pre-existing Blender violations on the same cue as an injected defect are ignored (option-a).
+- **`write_file` tool silently redirects** `passline/X.py` paths to workspace root. Write package files with `cat >` using absolute paths, then verify.
+- **Pydantic v2**: `model_validator(mode='after')`, `model_config`, `.model_dump()`. Never `@validator`, `class Config`, `.dict()`.
+- **Event schema is `"1.2"`** — always has `event_id`; `serialise()` enforces UTC. Test assertions must check `"1.2"`.
+- **`SrtDialect`** replaces old `_meta_cache` pattern — carry BOM/CRLF facts there, never in a separate dict.
+- **`asyncio.coroutine` is gone in Python 3.12** — if a new ADK/dependency uses it, patch before importing.
+- **`pip install -e ".[dev]"`** installs the package + pytest. The `[dev]` extra is in `pyproject.toml`.
+- Run a single test: `python -m pytest tests/test_pipeline.py::TestApprovalQueue::test_approve_resolves_item`
+- **Google ADK only**: `google-adk` and `google-genai` are the only permitted AI libraries. No OpenAI, Anthropic, or other providers.
+- **`install_retry_on_model(agent)`** must use `object.__setattr__(model, ...)` — the Gemini class is Pydantic and rejects direct assignment. Call AFTER agent construction.
+- **`LoopAgent` exits via `event.actions.escalate = True`** — NOT a callback. The verifier yields `Event(actions=EventActions(escalate=True))`.
+- **`output_schema` + tools coexist in ADK 2.7.1**: No mutual exclusion, despite what older docs say.
+- **`ParallelAgent`, `LoopAgent`, `SequentialAgent` are deprecated** in ADK 2.7.1 but still work. The deprecation warnings are expected and harmless.
+- **`BaseAgent._run_async_impl`** must yield at least one `Event` to commit state. Use `Event(author=self.name, actions=EventActions(state_delta={...}))`.
+- **Session state writes go through event delta**: `EventActions(state_delta={"key": val})` on the yielded event — NOT `ctx.state["key"] = val` directly (that pattern is for tool callbacks inside LlmAgents).
+- **`ApprovalQueue.await_decision(item_id)`** is a real async gate — the loop suspends until the FastAPI route fires `queue.approve/reject`. Do NOT call from synchronous code.

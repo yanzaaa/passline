@@ -1,4 +1,0 @@
-google-adk==2.7.1
-google-genai<3,>=2.19
-pydantic<3,>=2.12
-python-dotenv<2,>=1

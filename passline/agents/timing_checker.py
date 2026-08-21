@@ -1,0 +1,117 @@
+"""TimingCheckerAgent — deterministic timing rule checker.
+
+Reads the parsed ``SubtitleFile`` from ADK session state, runs the timing
+rules from the existing rule engine (CPS, duration, overlap, malformed
+timecode), and writes the findings to session state.
+
+Timing rules covered:
+- ``cps_exceeded``
+- ``cps_warning``
+- ``sub_one_second``
+- ``overlapping_cues``
+- ``malformed_timecode``
+
+No LLM involvement.
+"""
+from __future__ import annotations
+
+import dataclasses
+import logging
+from typing import AsyncGenerator
+
+from pydantic import ConfigDict
+
+from google.adk.agents.base_agent import BaseAgent
+from google.adk.agents.invocation_context import InvocationContext
+from google.adk.events.event import Event
+from google.adk.events.event_actions import EventActions
+
+from passline.events.bus import DeliveryEvent, EventBus, EventType
+from passline.models.subtitle import SubtitleFile
+from passline.qc.rules import Finding, check_file
+
+log = logging.getLogger(__name__)
+
+# Session state keys
+STATE_SUBTITLE_FILE = "subtitle_file"
+STATE_DELIVERY_ID = "delivery_id"
+STATE_LANGUAGE = "language"
+STATE_TIMING_FINDINGS = "timing_findings"
+
+# The subset of rules this checker owns
+_TIMING_RULES = frozenset({
+    "cps_exceeded",
+    "cps_warning",
+    "sub_one_second",
+    "overlapping_cues",
+    "malformed_timecode",
+})
+
+
+class TimingCheckerAgent(BaseAgent):
+    """ADK BaseAgent that runs timing rules on the current subtitle file."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    bus: EventBus
+
+    async def _run_async_impl(
+        self, ctx: InvocationContext
+    ) -> AsyncGenerator[Event, None]:
+        delivery_id: str = ctx.session.state.get(STATE_DELIVERY_ID, "")
+        language: str = ctx.session.state.get(STATE_LANGUAGE, "und")
+        subtitle_file_dict = ctx.session.state.get(STATE_SUBTITLE_FILE)
+
+        if subtitle_file_dict is None:
+            log.warning("TimingCheckerAgent: no subtitle_file in state — skipping")
+            yield Event(
+                author=self.name,
+                actions=EventActions(state_delta={STATE_TIMING_FINDINGS: []}),
+            )
+            return
+
+        self.bus.emit(DeliveryEvent(
+            event_type=EventType.STATION_WORKING,
+            delivery_id=delivery_id,
+            language=language,
+            details={"station": self.name},
+        ))
+
+        subtitle_file = SubtitleFile.model_validate(subtitle_file_dict)
+
+        # Run full rule engine then filter to timing rules only
+        all_findings: list[Finding] = check_file(subtitle_file)
+        timing_findings = [f for f in all_findings if f.rule in _TIMING_RULES]
+
+        # Emit QC_VIOLATION events for each timing finding
+        for finding in timing_findings:
+            self.bus.emit(DeliveryEvent(
+                event_type=EventType.QC_VIOLATION,
+                delivery_id=delivery_id,
+                language=language,
+                details={
+                    "rule":        finding.rule,
+                    "cue":         finding.cue_index,
+                    "value":       finding.measured_value,
+                    "threshold":   finding.threshold,
+                    "severity":    finding.severity,
+                    "explanation": finding.explanation,
+                    "checker":     "timing",
+                },
+            ))
+
+        self.bus.emit(DeliveryEvent(
+            event_type=EventType.STATION_READY,
+            delivery_id=delivery_id,
+            language=language,
+            details={"station": self.name, "findings": len(timing_findings)},
+        ))
+
+        log.debug("TimingCheckerAgent: %d timing findings", len(timing_findings))
+
+        yield Event(
+            author=self.name,
+            actions=EventActions(state_delta={
+                STATE_TIMING_FINDINGS: [dataclasses.asdict(f) for f in timing_findings],
+            }),
+        )

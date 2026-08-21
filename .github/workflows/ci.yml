@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  # ── Job 1: Full pytest suite on every push ────────────────────────────────
+  test:
+    name: pytest
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -e ".[dev]"
+
+      - name: Run test suite
+        run: |
+          python -m pytest --tb=short -q
+
+  # ── Job 2: Corpus grading table on PRs only ───────────────────────────────
+  corpus-report:
+    name: Corpus grading report
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    # Explicitly allowed to fail — does not block merge
+    continue-on-error: true
+
+    permissions:
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -e ".[dev]"
+
+      - name: Generate corpus grading report
+        id: report
+        run: |
+          python scripts/corpus_report.py > corpus_report.md
+          echo "report_path=corpus_report.md" >> "$GITHUB_OUTPUT"
+
+      - name: Post corpus report as PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('corpus_report.md', 'utf8');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
