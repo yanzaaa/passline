@@ -5,7 +5,7 @@ All expected values are hand-computed from the golden fixture:
   Cue 1: "Hello, world!"
     start_ms=1000, end_ms=3500
     duration_ms = 3500 - 1000 = 2500
-    total_chars = len("Hello, world!") = 13
+    total_chars = len("Hello, world!") = 13  (no markup)
     cps = 13 / (2500 / 1000) = 13 / 2.5 = 5.2
 
   Cue 2: "This is a subtitle." / "With two lines."
@@ -14,6 +14,13 @@ All expected values are hand-computed from the golden fixture:
     char_counts = [len("This is a subtitle."), len("With two lines.")] = [19, 15]
     total_chars = 19 + 15 = 34
     cps = 34 / (3000 / 1000) = 34 / 3.0 ≈ 11.3333...
+
+Markup-stripping values (computed by hand):
+  "<i>Hello</i>"                        → visible "Hello"            → 5 chars
+  "<b><i>Hi</i></b>"                    → visible "Hi"               → 2 chars
+  '<font color="red">Subtitle here!</font>' → visible "Subtitle here!" → 14 chars
+  "<i>" + "x"*43 + "</i>"              → raw 49, visible 43
+  '<font color="#ffffff">' + "a"*38 + '</font>' → raw 60, visible 38
 """
 from __future__ import annotations
 
@@ -99,3 +106,59 @@ class TestEdgeCases:
         cue = SubtitleCue(index=1, start_ms=0, end_ms=1000, lines=["x"])
         with pytest.raises(Exception):
             cue.index = 2  # type: ignore[misc]
+
+
+# ── Markup stripping ──────────────────────────────────────────────────────────
+
+class TestMarkupStripping:
+    def test_markup_italic_stripped(self) -> None:
+        """<i>...</i> tags are excluded; visible text is counted.
+        "<i>Hello</i>" → visible "Hello" → 5 chars
+        """
+        cue = SubtitleCue(index=1, start_ms=0, end_ms=2000, lines=["<i>Hello</i>"])
+        assert cue.char_counts == [5]
+
+    def test_markup_nested_stripped(self) -> None:
+        """Nested <b><i>...</i></b> → visible text only.
+        "<b><i>Hi</i></b>" → "Hi" → 2 chars
+        """
+        cue = SubtitleCue(index=1, start_ms=0, end_ms=2000, lines=["<b><i>Hi</i></b>"])
+        assert cue.char_counts == [2]
+
+    def test_markup_font_tag_stripped(self) -> None:
+        """<font color="..."> tag is stripped; visible text counted.
+        '<font color="red">Subtitle here!</font>' → "Subtitle here!" → 14 chars
+        """
+        cue = SubtitleCue(
+            index=1, start_ms=0, end_ms=2000,
+            lines=['<font color="red">Subtitle here!</font>']
+        )
+        assert cue.char_counts == [14]
+
+    def test_markup_raw_over_42_visible_under(self) -> None:
+        """Raw length > 42 due to markup; visible length < 42 — char_count is visible.
+        '<font color="#ffffff">' (22) + 'a'*18 (18) + '</font>' (7) = raw 47
+        visible = 18 chars (under 42)
+        """
+        line = '<font color="#ffffff">' + "a" * 18 + "</font>"
+        assert len(line) == 47  # sanity-check the raw length
+        cue = SubtitleCue(index=1, start_ms=0, end_ms=2000, lines=[line])
+        assert cue.char_counts == [18]
+        assert cue.char_counts[0] < 42
+
+    def test_markup_raw_over_42_visible_also_over(self) -> None:
+        """Raw length > 42 AND visible length > 42 after stripping markup.
+        '<i>' (3) + 'x'*43 (43) + '</i>' (4) = raw 50, visible 43 (still > 42)
+        """
+        line = "<i>" + "x" * 43 + "</i>"
+        assert len(line) == 50
+        cue = SubtitleCue(index=1, start_ms=0, end_ms=2000, lines=[line])
+        assert cue.char_counts == [43]
+        assert cue.char_counts[0] > 42
+
+    def test_markup_lines_field_intact(self) -> None:
+        """The raw lines field with markup is never modified."""
+        raw = "<b>Important</b>"
+        cue = SubtitleCue(index=1, start_ms=0, end_ms=2000, lines=[raw])
+        assert cue.lines[0] == raw  # markup preserved in storage
+        assert cue.char_counts == [9]  # only "Important" counted
