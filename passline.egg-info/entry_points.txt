@@ -1,0 +1,2 @@
+[console_scripts]
+passline = passline.__main__:main

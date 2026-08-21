@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: passline
+Version: 0.1.0
+Summary: Multi-agent subtitle QC and repair system for streaming delivery workflows
+Requires-Python: >=3.12
+License-File: LICENSE
+Requires-Dist: google-adk==2.7.1
+Requires-Dist: google-genai<3,>=2.19
+Requires-Dist: pydantic<3,>=2.12
+Requires-Dist: python-dotenv<2,>=1
+Dynamic: license-file
