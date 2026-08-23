@@ -34,7 +34,8 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
   --r:       6px;
   --r2:      10px;
 }
-html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;overflow-x:hidden}
+/* OBJ-1: scale base font for 1080p screen-capture legibility */
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font);font-size:15px;overflow-x:hidden}
 
 /* ── Scrollbars ──────────────────────────────────────────────────────── */
 ::-webkit-scrollbar{width:4px;height:4px}
@@ -93,8 +94,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
   display:flex;flex-direction:column;gap:12px;
 }
 .col:last-child{border-right:none}
+/* OBJ-1: boost col-header label size proportionally */
 .col-header{
-  font-size:10px;font-weight:600;letter-spacing:.12em;
+  font-size:11px;font-weight:600;letter-spacing:.12em;
   text-transform:uppercase;color:var(--muted);
   padding-bottom:10px;border-bottom:1px solid var(--border);
 }
@@ -122,16 +124,43 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 input[type=file]{display:none}
 
 /* ── Demo chips ──────────────────────────────────────────────────────── */
-.demo-chips{display:flex;gap:8px;flex-wrap:wrap}
+/* OBJ-6: single-row, no-wrap chips */
+.demo-chips{display:flex;gap:8px;flex-wrap:nowrap;overflow-x:auto}
+/* OBJ-1: bump chip label size for legibility */
 .chip{
-  padding:5px 12px;border-radius:20px;font-size:12px;font-weight:500;
+  padding:5px 12px;border-radius:20px;font-size:13px;font-weight:500;
   border:1px solid var(--border2);background:var(--surface);
   color:var(--text);cursor:pointer;transition:all .2s;
-  font-family:var(--mono);
+  font-family:var(--mono);white-space:nowrap;flex-shrink:0;
 }
 .chip:hover{border-color:var(--blue);color:var(--blue);background:var(--blue-dim)}
+/* OBJ-6: hopeless-case chip — hazard-stripe background, amber text */
+.chip-hazard{
+  border-color:rgba(245,166,35,.55);
+  color:var(--amber);
+  background:repeating-linear-gradient(
+    -45deg,
+    rgba(245,166,35,.10) 0px,
+    rgba(245,166,35,.10) 4px,
+    rgba(0,0,0,.0)  4px,
+    rgba(0,0,0,.0)  10px
+  );
+}
+.chip-hazard:hover{
+  border-color:var(--amber);
+  background:repeating-linear-gradient(
+    -45deg,
+    rgba(245,166,35,.20) 0px,
+    rgba(245,166,35,.20) 4px,
+    rgba(0,0,0,.0)  4px,
+    rgba(0,0,0,.0)  10px
+  );
+  color:var(--amber);
+}
 
 /* ── Delivery cards ──────────────────────────────────────────────────── */
+/* OBJ-8: shared internal spacing token — all card child elements use --dc-gap */
+:root{--dc-gap:8px}
 .delivery-card{
   background:var(--surface);border:1px solid var(--border);
   border-radius:var(--r);padding:12px;
@@ -140,41 +169,67 @@ input[type=file]{display:none}
 .delivery-card.hold{border-color:rgba(255,59,59,.5)}
 .delivery-card.repairing{border-color:rgba(245,166,35,.4)}
 .delivery-card.cleared{border-color:rgba(0,210,106,.4)}
+/* OBJ-3: honest-fail card — deep crimson border, visually distinct from amber HOLD */
+.delivery-card.failed{border-color:rgba(220,38,38,.7);background:rgba(220,38,38,.03)}
 
-.dc-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
-.dc-id{font-family:var(--mono);font-size:12px;font-weight:500;color:#fff}
-.dc-lang{font-size:11px;color:var(--muted);font-family:var(--mono)}
-.dc-meta{font-size:11px;color:var(--muted);margin-bottom:8px}
+/* OBJ-8: header, meta, progress, and action rows share --dc-gap */
+.dc-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--dc-gap)}
+/* OBJ-1: boost card IDs and metadata for legibility */
+.dc-id{font-family:var(--mono);font-size:13px;font-weight:500;color:#fff}
+.dc-lang{font-size:12px;color:var(--muted);font-family:var(--mono)}
+.dc-meta{font-size:12px;color:var(--muted);margin-bottom:var(--dc-gap)}
 
+/* OBJ-1: badge text larger; OBJ-3: distinct honest-fail colour */
 .status-badge{
-  padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;
+  padding:3px 9px;border-radius:12px;font-size:11px;font-weight:700;
   letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;
 }
-.badge-hold{background:var(--red-dim);color:var(--red);border:1px solid rgba(255,59,59,.3)}
+/* OBJ-3: HOLD uses amber, not red, so badge-failed (red) is unambiguously different */
+.badge-hold{background:var(--amber-dim);color:var(--amber);border:1px solid rgba(245,166,35,.4)}
 .badge-repairing{background:var(--amber-dim);color:var(--amber);border:1px solid rgba(245,166,35,.3)}
 .badge-cleared{background:var(--green-dim);color:var(--green);border:1px solid rgba(0,210,106,.3)}
 .badge-pending{background:rgba(74,158,255,.08);color:var(--blue);border:1px solid rgba(74,158,255,.2)}
+/* OBJ-3: honest-fail badge — saturated crimson (#dc2626), visually distinct from amber HOLD */
+.badge-failed{background:rgba(220,38,38,.12);color:#f87171;border:1px solid rgba(220,38,38,.45)}
 
+/* OBJ-8: progress bar, download link, briefing button share --dc-gap top margin */
 .progress-bar{
-  height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:6px;
+  height:3px;background:var(--border);border-radius:2px;overflow:hidden;
+  margin-top:var(--dc-gap);
 }
 .progress-fill{height:100%;background:var(--amber);border-radius:2px;width:0%;
   transition:width .4s ease;box-shadow:0 0 6px var(--amber)}
 
 /* ── Break button ────────────────────────────────────────────────────── */
+/* OBJ-1: larger label; OBJ-2: explicit disabled state */
 .break-btn{
   width:100%;padding:12px;border-radius:var(--r);
   background:rgba(255,59,59,.1);border:1px solid rgba(255,59,59,.3);
-  color:var(--red);font-size:13px;font-weight:700;letter-spacing:.06em;
+  color:var(--red);font-size:14px;font-weight:700;letter-spacing:.06em;
   cursor:pointer;transition:all .2s;text-transform:uppercase;
 }
 .break-btn:hover{background:rgba(255,59,59,.2);border-color:var(--red)}
+/* OBJ-2: disabled — muted colour, no-allowed cursor, suppressed border */
+.break-btn:disabled,.break-btn[disabled]{
+  background:rgba(255,59,59,.04);
+  border-color:rgba(255,59,59,.12);
+  color:rgba(255,59,59,.35);
+  cursor:not-allowed;
+  opacity:.55;
+}
+.break-btn:disabled:hover,.break-btn[disabled]:hover{
+  background:rgba(255,59,59,.04);
+  border-color:rgba(255,59,59,.12);
+}
 
 /* ── Demo controls ───────────────────────────────────────────────────── */
-.demo-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+/* OBJ-6: force single row, no wrapping */
+.demo-controls{display:flex;gap:8px;align-items:center;flex-wrap:nowrap;overflow-x:auto}
+/* OBJ-1: slightly larger control button text */
 .ctrl-btn{
-  padding:7px 16px;border-radius:var(--r);font-size:12px;font-weight:600;
+  padding:7px 16px;border-radius:var(--r);font-size:13px;font-weight:600;
   cursor:pointer;border:1px solid;transition:all .2s;letter-spacing:.03em;
+  white-space:nowrap;flex-shrink:0;
 }
 .btn-play{
   background:var(--green-dim);border-color:rgba(0,210,106,.4);color:var(--green);
@@ -188,12 +243,85 @@ input[type=file]{display:none}
   background:var(--surface);border-color:var(--border2);color:var(--muted);
 }
 .btn-loop.active{background:var(--blue-dim);border-color:rgba(74,158,255,.4);color:var(--blue)}
+/* OBJ-1: boost SSE status label legibility */
 .sse-status{
-  font-size:10px;font-weight:600;letter-spacing:.06em;display:flex;align-items:center;gap:5px;
+  font-size:11px;font-weight:600;letter-spacing:.06em;display:flex;align-items:center;gap:5px;
 }
 .sse-dot{width:6px;height:6px;border-radius:50%;background:var(--muted)}
 .sse-dot.live{background:var(--green);box-shadow:0 0 5px var(--green)}
 .sse-dot.reconnecting{background:var(--amber);animation:pulse 1s infinite}
+
+/* ── Mode indicator (LIVE / REPLAY) ─────────────────────────────────── */
+/* OBJ-5: LIVE = saturated green; REPLAY = amber; never simultaneous */
+.mode-indicator{
+  font-size:11px;font-weight:700;letter-spacing:.08em;
+  padding:3px 10px;border-radius:20px;
+  text-transform:uppercase;
+}
+.mode-indicator.live{
+  background:rgba(0,210,106,.12);
+  border:1px solid rgba(0,210,106,.4);
+  color:#00d26a;
+}
+.mode-indicator.replay{
+  background:rgba(245,166,35,.12);
+  border:1px solid rgba(245,166,35,.45);
+  color:#f5a623;
+}
+
+/* ── Confidence chip & citation popover ─────────────────────────────── */
+/* OBJ-4: compact, tabular numerals, small font */
+.conf-chip{
+  display:inline-block;
+  padding:1px 6px;border-radius:4px;
+  font-size:10px;font-weight:600;
+  font-family:var(--mono);
+  font-variant-numeric:tabular-nums;
+  background:rgba(74,158,255,.12);
+  border:1px solid rgba(74,158,255,.3);
+  color:var(--blue);
+  cursor:pointer;
+  vertical-align:middle;
+  margin-left:4px;
+  letter-spacing:.02em;
+}
+.flag-popover{
+  margin-top:4px;margin-left:8px;
+  padding:6px 10px;border-radius:var(--r);
+  background:var(--card);border:1px solid var(--border2);
+  font-size:11px;font-family:var(--mono);
+  font-variant-numeric:tabular-nums;
+  color:var(--text);line-height:1.6;
+  max-width:280px;
+}
+.flag-popover strong{color:var(--blue);font-size:10px;letter-spacing:.04em}
+
+/* ── Waiting-on-human delivery card state ───────────────────────────── */
+/* OBJ-7: smooth pulse, ≥ 2s cycle, camera-safe opacity/scale animation */
+@keyframes waiting-pulse{
+  0%,100%{box-shadow:none;border-color:rgba(245,166,35,.35)}
+  50%     {box-shadow:0 0 14px rgba(245,166,35,.22);border-color:rgba(245,166,35,.75)}
+}
+.delivery-card.waiting{
+  border-color:rgba(245,166,35,.5);
+  animation:waiting-pulse 2.4s ease-in-out infinite;
+}
+
+/* ── Briefing button (inside delivery card) ─────────────────────────── */
+/* OBJ-8: shares --dc-gap top margin with progress bar and download link */
+.briefing-btn{
+  display:inline-block;margin-top:var(--dc-gap);
+  padding:3px 10px;border-radius:var(--r);
+  font-size:11px;font-weight:600;cursor:pointer;
+  background:rgba(155,114,255,.1);
+  border:1px solid rgba(155,114,255,.3);
+  color:var(--violet);transition:all .2s;
+}
+.briefing-btn:hover{background:rgba(155,114,255,.2);border-color:var(--violet)}
+.briefing-btn:disabled,.briefing-btn[disabled]{
+  opacity:.45;cursor:not-allowed;color:var(--muted);
+  border-color:var(--border2);background:transparent;
+}
 
 /* ── Station tiles ───────────────────────────────────────────────────── */
 .stations-grid{
@@ -204,22 +332,25 @@ input[type=file]{display:none}
   border-radius:var(--r);padding:10px 12px;
   transition:border-color .3s;
 }
+/* OBJ-7: station working pulse also slowed to camera-safe 2s+ */
 .station-tile.working{
   border-color:rgba(245,166,35,.5);
   background:rgba(245,166,35,.04);
-  animation:station-pulse 1.5s ease infinite;
+  animation:station-pulse 2s ease-in-out infinite;
 }
 .station-tile.offline{opacity:.45}
 @keyframes station-pulse{0%,100%{box-shadow:none}50%{box-shadow:0 0 10px rgba(245,166,35,.2)}}
 
+/* OBJ-1: station labels and counters boosted for 1080p legibility */
 .station-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
-.station-name{font-size:12px;font-weight:600;color:#fff}
+.station-name{font-size:13px;font-weight:600;color:#fff}
 .lamp{width:10px;height:10px;border-radius:50%;transition:all .4s;flex-shrink:0}
 .lamp-ready{background:var(--green);box-shadow:0 0 7px var(--green)}
-.lamp-working{background:var(--amber);box-shadow:0 0 9px var(--amber);animation:pulse 1s infinite}
+/* OBJ-7: lamp working pulse slowed to 2s — camera-safe */
+.lamp-working{background:var(--amber);box-shadow:0 0 9px var(--amber);animation:pulse 2s ease-in-out infinite}
 .lamp-offline{background:var(--dim)}
-.station-role{font-size:10px;color:var(--muted);line-height:1.4;margin-bottom:6px}
-.station-counter{font-family:var(--mono);font-size:11px;color:var(--dim)}
+.station-role{font-size:11px;color:var(--muted);line-height:1.4;margin-bottom:6px}
+.station-counter{font-family:var(--mono);font-size:12px;color:var(--dim)}
 .station-counter span{color:var(--blue)}
 
 /* ── Heat strip ──────────────────────────────────────────────────────── */
@@ -285,8 +416,9 @@ input[type=file]{display:none}
 .log-entry.lifecycle{color:var(--blue)}
 .log-entry.station  {color:var(--muted)}
 .log-entry.approval {color:var(--amber)}
-.log-ts{color:var(--dim);margin-right:8px;font-size:10px}
-.log-type{font-weight:600;margin-right:6px;min-width:85px;display:inline-block}
+/* OBJ-1: log timestamps and type labels readable at capture resolution */
+.log-ts{color:var(--dim);margin-right:8px;font-size:11px}
+.log-type{font-weight:600;margin-right:6px;min-width:90px;display:inline-block;font-size:11px}
 
 /* ── Approval card ───────────────────────────────────────────────────── */
 .approval-card{
@@ -299,8 +431,9 @@ input[type=file]{display:none}
   background:rgba(245,166,35,.05);
   box-shadow:0 0 20px rgba(245,166,35,.1);
 }
-.approval-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px}
-.approval-sub{font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.5}
+/* OBJ-1: approval panel text larger for legibility */
+.approval-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px}
+.approval-sub{font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5}
 .approval-btns{display:flex;gap:8px}
 .btn-approve{
   flex:1;padding:9px;border-radius:var(--r);
@@ -372,7 +505,7 @@ input[type=file]{display:none}
       <div class="demo-chips">
         <div class="chip" onclick="triggerDemo('DEMO-EN-001','en-US')">EN-001</div>
         <div class="chip" onclick="triggerDemo('DEMO-FR-002','fr-FR')">FR-002</div>
-        <div class="chip" onclick="triggerDemo('DEMO-JA-003','ja-JP')">JA-003</div>
+        <div class="chip chip-hazard" onclick="triggerDemo('DEMO-JA-003','ja-JP')">JA-003</div>
       </div>
     </div>
 
