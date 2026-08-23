@@ -32,6 +32,7 @@ from google.adk.agents.invocation_context import InvocationContext
 from google.adk.events.event import Event
 from google.adk.events.event_actions import EventActions
 
+from passline.agents.event_utils import emit_station_ready, emit_station_working
 from passline.events.bus import DeliveryEvent, EventBus, EventType
 from passline.io.srt import write_srt
 from passline.models.subtitle import SubtitleFile
@@ -48,6 +49,9 @@ STATE_LANGUAGE_FINDINGS = "language_findings"
 STATE_REPAIR_LOG = "repair_log"
 STATE_REPORT = "report"
 STATE_REPAIRED_BYTES = "repaired_bytes"
+
+_STATION_ID = "reporter"
+_STATION_NAME = "Reporter"
 
 
 class ReporterAgent(BaseAgent):
@@ -69,12 +73,7 @@ class ReporterAgent(BaseAgent):
         language_findings: list[dict] = ctx.session.state.get(STATE_LANGUAGE_FINDINGS, [])
         repair_log: list[dict] = ctx.session.state.get(STATE_REPAIR_LOG, [])
 
-        self.bus.emit(DeliveryEvent(
-            event_type=EventType.STATION_WORKING,
-            delivery_id=delivery_id,
-            language=language,
-            details={"station": self.name},
-        ))
+        emit_station_working(self.bus, _STATION_ID, _STATION_NAME, delivery_id, language)
 
         # Produce repaired bytes via the existing writer
         repaired_bytes = b""
@@ -128,12 +127,10 @@ class ReporterAgent(BaseAgent):
                 },
             ))
 
-        self.bus.emit(DeliveryEvent(
-            event_type=EventType.STATION_READY,
-            delivery_id=delivery_id,
-            language=language,
-            details={"station": self.name, "verdict": verdict},
-        ))
+        emit_station_ready(
+            self.bus, _STATION_ID, _STATION_NAME, delivery_id, language,
+            verdict=verdict,
+        )
 
         yield Event(
             author=self.name,

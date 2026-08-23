@@ -1,0 +1,55 @@
+# .gcloudignore — controls what gcloud CLI uploads to Cloud Run
+# An explicit .gcloudignore disables the .gitignore fallback, so every
+# sensitive file and directory must be listed explicitly here.
+
+# === INCLUDE: only files the buildpack needs ===
+# passline/ package, config files, and corpus demo assets are included
+# by absence from the exclude list below.
+
+# === EXCLUDE: never upload these ===
+
+# Credentials and local config (must be explicit — .gitignore fallback disabled)
+.env
+.venv/
+
+# Git internals
+.git/
+.gitignore
+.gitattributes
+
+# Local-only tooling and session state
+.bob/
+.remember/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Build artifacts
+*.egg-info/
+__pycache__/
+*.pyc
+*.pyo
+build/
+dist/
+
+# Runtime output (log accumulates during development)
+passline_events.jsonl
+
+# Tests and development materials (not needed in container)
+tests/
+docs/
+scripts/
+
+# Per-mission plan files
+passline-foundation-plan.md
+passline-mission02-plan.md
+passline-mission03-plan.md
+passline-mission04-plan.md
+passline-mission05-plan.md
+passline-mission06-plan.md
+passline-mission07-plan.md
+
+# IDE
+.DS_Store
+*.swp
+*.swo

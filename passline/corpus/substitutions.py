@@ -45,6 +45,18 @@ SUBSTITUTIONS: dict[str, list[tuple[str, str]]] = {
         ("gagner",      "perdre"),
         ("perdre",      "gagner"),
         ("sauver",      "détruire"),
+        # Additional pairs confirmed present in the FR clean corpus
+        ("bien",        "mal"),
+        ("mal",         "bien"),
+        ("tout",        "rien"),
+        ("rien",        "tout"),
+        ("maintenant",  "jamais"),
+        ("plus",        "moins"),
+        ("moins",       "plus"),
+        ("vrai",        "faux"),
+        ("faux",        "vrai"),
+        ("ensemble",    "seul"),
+        ("seul",        "ensemble"),
     ],
     "de": [
         ("immer",       "niemals"),
@@ -62,6 +74,16 @@ SUBSTITUTIONS: dict[str, list[tuple[str, str]]] = {
         ("gewinnen",    "verlieren"),
         ("verlieren",   "gewinnen"),
         ("schützen",    "verraten"),
+        # Additional pairs confirmed present in the DE clean corpus
+        ("alle",        "keine"),
+        ("keine",       "alle"),
+        ("erlaubt",     "verboten"),
+        ("verboten",    "erlaubt"),
+        ("möglich",     "unmöglich"),
+        ("private",     "öffentliche"),
+        ("neue",        "alte"),
+        ("alte",        "neue"),
+        ("zahlen",      "erhalten"),
     ],
 }
 

@@ -66,6 +66,16 @@
       "detail": "Cue 20: 3 lines (max is 2)"
     },
     {
+      "cue_index": 24,
+      "defect_type": "meaning_swap",
+      "rule": "meaning_changed",
+      "threshold": 0.0,
+      "measured_value": 0.0,
+      "severity": "WARNING",
+      "category": "MEANING_LEVEL",
+      "detail": "Cue 24: 'Rien' → 'Tout'"
+    },
+    {
       "cue_index": 26,
       "defect_type": "short_duration",
       "rule": "sub_one_second",
@@ -104,6 +114,16 @@
       "severity": "ERROR",
       "category": "DETERMINISTIC",
       "detail": "Cue 70 end=518500ms overlaps cue 71 start=518000ms by 500ms"
+    },
+    {
+      "cue_index": 75,
+      "defect_type": "meaning_swap",
+      "rule": "meaning_changed",
+      "threshold": 0.0,
+      "measured_value": 0.0,
+      "severity": "WARNING",
+      "category": "MEANING_LEVEL",
+      "detail": "Cue 75: 'tout' → 'rien'"
     }
   ]
 }

@@ -6,13 +6,15 @@ dict) back to session state.  Emits ``subtitle.submitted`` via the event bus
 (the parser already does this when ``bus=`` is provided) and wraps the work
 with ``station.working`` / ``station.ready`` lifecycle events.
 
+Also emits a ``cue.analysis`` event with per-cue CPS and duration data so the
+dashboard heat strip can be populated.
+
 No LLM involvement.
 """
 from __future__ import annotations
 
-import dataclasses
 import logging
-from typing import TYPE_CHECKING, Any, AsyncGenerator
+from typing import Any, AsyncGenerator
 
 from pydantic import ConfigDict
 
@@ -21,11 +23,9 @@ from google.adk.agents.invocation_context import InvocationContext
 from google.adk.events.event import Event
 from google.adk.events.event_actions import EventActions
 
+from passline.agents.event_utils import emit_station_ready, emit_station_working
 from passline.events.bus import DeliveryEvent, EventBus, EventType
 from passline.io.srt import parse_srt
-
-if TYPE_CHECKING:
-    pass
 
 log = logging.getLogger(__name__)
 
@@ -35,20 +35,8 @@ STATE_LANGUAGE = "language"
 STATE_DELIVERY_ID = "delivery_id"
 STATE_SUBTITLE_FILE = "subtitle_file"
 
-
-def _station_event(
-    name: str,
-    event_type: EventType,
-    delivery_id: str,
-    language: str,
-    bus: EventBus,
-) -> None:
-    bus.emit(DeliveryEvent(
-        event_type=event_type,
-        delivery_id=delivery_id,
-        language=language,
-        details={"station": name},
-    ))
+_STATION_ID = "ingest"
+_STATION_NAME = "Ingest"
 
 
 class IngestAgent(BaseAgent):
@@ -71,7 +59,7 @@ class IngestAgent(BaseAgent):
         language: str = ctx.session.state.get(STATE_LANGUAGE, "und")
         delivery_id: str = ctx.session.state.get(STATE_DELIVERY_ID, "")
 
-        _station_event(self.name, EventType.STATION_WORKING, delivery_id, language, self.bus)
+        emit_station_working(self.bus, _STATION_ID, _STATION_NAME, delivery_id, language)
         log.debug("IngestAgent: parsing %d bytes lang=%s", len(srt_bytes), language)
 
         subtitle_file = parse_srt(
@@ -81,7 +69,28 @@ class IngestAgent(BaseAgent):
             bus=self.bus,
         )
 
-        _station_event(self.name, EventType.STATION_READY, delivery_id, language, self.bus)
+        # Emit cue.analysis so the dashboard heat strip can be populated
+        self.bus.emit(DeliveryEvent(
+            event_type=EventType.CUE_ANALYSIS,
+            delivery_id=delivery_id,
+            language=language,
+            details={
+                "cues": [
+                    {
+                        "index": c.index,
+                        "cps": round(c.cps, 2),
+                        "duration_ms": c.duration_ms,
+                        "text": " ".join(c.lines),
+                    }
+                    for c in subtitle_file.cues
+                ]
+            },
+        ))
+
+        emit_station_ready(
+            self.bus, _STATION_ID, _STATION_NAME, delivery_id, language,
+            cue_count=len(subtitle_file.cues),
+        )
 
         # Serialise SubtitleFile as a plain dict for session storage
         subtitle_file_dict: dict[str, Any] = subtitle_file.model_dump()

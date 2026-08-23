@@ -66,6 +66,16 @@
       "detail": "Cue 18: CPS=22.01 > 20.0 (dur=1272ms, chars=28)"
     },
     {
+      "cue_index": 20,
+      "defect_type": "meaning_swap",
+      "rule": "meaning_changed",
+      "threshold": 0.0,
+      "measured_value": 0.0,
+      "severity": "WARNING",
+      "category": "MEANING_LEVEL",
+      "detail": "Cue 20: 'Alle' → 'Keine'"
+    },
+    {
       "cue_index": 47,
       "defect_type": "three_line_cue",
       "rule": "three_line_cue",
@@ -84,6 +94,16 @@
       "severity": "ERROR",
       "category": "DETERMINISTIC",
       "detail": "Cue 63 end=422500ms overlaps cue 64 start=422000ms by 500ms"
+    },
+    {
+      "cue_index": 66,
+      "defect_type": "meaning_swap",
+      "rule": "meaning_changed",
+      "threshold": 0.0,
+      "measured_value": 0.0,
+      "severity": "WARNING",
+      "category": "MEANING_LEVEL",
+      "detail": "Cue 66: 'keine' → 'alle'"
     },
     {
       "cue_index": 67,

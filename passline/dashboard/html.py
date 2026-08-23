@@ -362,7 +362,7 @@ input[type=file]{display:none}
     <div class="dropzone" id="dropzone" title="Drop an SRT file or click to browse">
       <div class="dropzone-icon">⬇</div>
       <div class="dropzone-label">Drop subtitle file here</div>
-      <div class="dropzone-sub">or click to browse · triggers demo</div>
+      <div class="dropzone-sub">or click to browse · runs QC pipeline</div>
       <input type="file" id="file-input" accept=".srt,.vtt,.ass,.ssa">
     </div>
 
@@ -380,9 +380,10 @@ input[type=file]{display:none}
     <div class="card" style="padding:10px 14px">
       <div style="font-size:10px;color:var(--muted);font-weight:600;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">Demo Replay</div>
       <div class="demo-controls">
-        <button class="ctrl-btn btn-play" onclick="startReplay(false)">▶ PLAY</button>
+        <button class="ctrl-btn btn-play" onclick="startReplay(loopMode)">▶ PLAY</button>
         <button class="ctrl-btn btn-stop" onclick="stopReplay()">■ STOP</button>
         <button class="ctrl-btn btn-loop" id="btn-loop" onclick="toggleLoop()">↺ LOOP</button>
+        <button class="ctrl-btn btn-stop" onclick="startReset()" title="Clear board for a fresh take">⟳ RESET</button>
       </div>
     </div>
 
@@ -658,6 +659,18 @@ function markCleared(ev) {
   if (card)  { card.className  = 'delivery-card cleared'; }
   if (badge) { badge.className = 'status-badge badge-cleared'; badge.textContent = 'CLEARED FOR DELIVERY'; }
   if (prog)  { prog.style.width = '100%'; prog.style.background = 'var(--green)'; }
+  // Append a download link for the repaired SRT file
+  if (card) {
+    const existing = card.querySelector('.download-link');
+    if (!existing) {
+      const link = document.createElement('a');
+      link.className = 'download-link';
+      link.href = `/api/download/${encodeURIComponent(ev.delivery_id)}`;
+      link.textContent = '⬇ Download repaired SRT';
+      link.style.cssText = 'display:block;margin-top:6px;font-size:11px;color:var(--green);text-decoration:underline;';
+      card.appendChild(link);
+    }
+  }
 }
 
 // ── Holds counter ────────────────────────────────────────────────────
@@ -810,15 +823,41 @@ async function stopReplay() {
   await fetch('/api/stop', {method:'POST'});
 }
 
+async function startReset() {
+  await fetch('/api/reset', {method:'POST'});
+  // Clear in-memory dedup set and delivery cards so the board looks fresh
+  seen.clear();
+  document.getElementById('delivery-cards').innerHTML = '';
+  document.getElementById('log-list').innerHTML = '';
+  document.getElementById('holds-count').textContent = '0';
+}
+
 function toggleLoop() {
   loopMode = !loopMode;
   const btn = document.getElementById('btn-loop');
   btn.classList.toggle('active', loopMode);
 }
 
-function triggerDemo(id, lang) {
-  // Visual: synthesise a card if not present (demo chips don't change delivery id)
-  startReplay(false);
+async function triggerDemo(id, lang) {
+  // Fetch the bundled demo corpus file and POST it to /api/upload so the
+  // real pipeline runs — no demo replay, no startReplay() call.
+  try {
+    const srtResp = await fetch(`/api/demo/${encodeURIComponent(lang)}`);
+    if (!srtResp.ok) { console.warn('demo fetch failed', srtResp.status); return; }
+    const blob = await srtResp.blob();
+    const filename = `tos-${lang.split('-')[0].toLowerCase()}-broken.srt`;
+    const file = new File([blob], filename, {type: 'text/plain'});
+    const label = document.querySelector('.dropzone-label');
+    if (label) label.textContent = `▶ ${filename}`;
+    const fd = new FormData();
+    fd.append('file', file);
+    const uploadResp = await fetch('/api/upload', {method: 'POST', body: fd});
+    if (!uploadResp.ok) console.warn('demo upload failed', uploadResp.status);
+    else {
+      const data = await uploadResp.json();
+      console.log('demo pipeline started', data);
+    }
+  } catch (e) { console.warn('triggerDemo error', e); }
 }
 
 // ── File drop zone ────────────────────────────────────────────────────
@@ -843,7 +882,7 @@ function handleFile(file) {
   fd.append('file', file);
   fetch('/api/upload', {method:'POST', body: fd})
     .then(r => r.json())
-    .then(() => startReplay(false))
+    .then(data => console.log('pipeline started', data))
     .catch(e => console.warn('upload failed', e));
 }
 

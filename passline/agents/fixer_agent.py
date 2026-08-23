@@ -45,6 +45,7 @@ from google.adk.events.event import Event
 from google.adk.events.event_actions import EventActions
 
 from passline.agents.callbacks import install_retry_on_model
+from passline.agents.event_utils import emit_station_ready, emit_station_working
 from passline.events.bus import DeliveryEvent, EventBus, EventType
 from passline.models.subtitle import SubtitleCue, SubtitleFile
 from passline.pipeline.approval import ApprovalQueue
@@ -61,6 +62,9 @@ STATE_DELIVERY_ID = "delivery_id"
 STATE_LANGUAGE = "language"
 STATE_ALL_FINDINGS = "all_findings"
 STATE_REPAIR_LOG = "repair_log"
+
+_STATION_ID = "fixer"
+_STATION_NAME = "Fixer"
 
 # Rules handled deterministically (no LLM)
 _DETERMINISTIC_RULES = frozenset({
@@ -198,20 +202,13 @@ class FixerAgent(LlmAgent):
         all_findings_dicts: list[dict] = ctx.session.state.get(STATE_ALL_FINDINGS, [])
         existing_repair_log: list[dict] = ctx.session.state.get(STATE_REPAIR_LOG, [])
 
-        self.bus.emit(DeliveryEvent(
-            event_type=EventType.STATION_WORKING,
-            delivery_id=delivery_id,
-            language=language,
-            details={"station": self.name},
-        ))
+        emit_station_working(self.bus, _STATION_ID, _STATION_NAME, delivery_id, language)
 
         if not subtitle_file_dict or not all_findings_dicts:
-            self.bus.emit(DeliveryEvent(
-                event_type=EventType.STATION_READY,
-                delivery_id=delivery_id,
-                language=language,
-                details={"station": self.name, "repairs": 0},
-            ))
+            emit_station_ready(
+                self.bus, _STATION_ID, _STATION_NAME, delivery_id, language,
+                repairs=0,
+            )
             yield Event(
                 author=self.name,
                 actions=EventActions(state_delta={}),
@@ -227,21 +224,30 @@ class FixerAgent(LlmAgent):
 
             if rule in _DETERMINISTIC_RULES:
                 # ── Deterministic repair ──────────────────────────────────
+                cue_index = finding["cue_index"]
+                orig_cue = next((c for c in cues if c.index == cue_index), None)
+                original_text = "\n".join(orig_cue.lines) if orig_cue else ""
                 new_cues = _apply_deterministic_fix(cues, finding)
                 if new_cues is not cues:
-                    repair_entry = {
+                    repaired_cue = next((c for c in new_cues if c.index == cue_index), None)
+                    repaired_text = "\n".join(repaired_cue.lines) if repaired_cue else ""
+                    repair_log.append({
                         "rule": rule,
-                        "cue_index": finding["cue_index"],
+                        "cue_index": cue_index,
                         "type": "deterministic",
                         "approved": True,
-                    }
-                    repair_log.append(repair_entry)
+                    })
                     cues = new_cues
                     self.bus.emit(DeliveryEvent(
                         event_type=EventType.QC_REPAIRED,
                         delivery_id=delivery_id,
                         language=language,
-                        details=repair_entry,
+                        details={
+                            "rule":     rule,
+                            "cue":      cue_index,
+                            "original": original_text,
+                            "repaired": repaired_text,
+                        },
                     ))
 
             else:
@@ -309,12 +315,10 @@ class FixerAgent(LlmAgent):
         # Rebuild the SubtitleFile with repaired cues
         repaired_file = subtitle_file.model_copy(update={"cues": cues})
 
-        self.bus.emit(DeliveryEvent(
-            event_type=EventType.STATION_READY,
-            delivery_id=delivery_id,
-            language=language,
-            details={"station": self.name, "repairs": len(repair_log)},
-        ))
+        emit_station_ready(
+            self.bus, _STATION_ID, _STATION_NAME, delivery_id, language,
+            repairs=len(repair_log),
+        )
 
         yield Event(
             author=self.name,

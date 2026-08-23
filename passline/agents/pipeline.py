@@ -7,7 +7,8 @@ Assembles the full ADK agent graph:
     ├── ParallelAgent             Stage 2: concurrent checkers
     │   ├── TimingCheckerAgent
     │   ├── FormatCheckerAgent
-    │   └── LanguageCheckerAgent  (LLM, output_schema)
+    │   └── LanguageCheckerAgent  (BaseAgent, calls Gemini directly)
+    ├── FindingsMergerAgent       Stage 2b: merge all findings → all_findings
     ├── LoopAgent (max 3 passes)  Stage 3: repair–verify cycle
     │   ├── FixerAgent            (LLM for language-level fixes only)
     │   └── VerifierAgent
@@ -24,6 +25,7 @@ from passline.agents.ingest_agent import IngestAgent
 from passline.agents.timing_checker import TimingCheckerAgent
 from passline.agents.format_checker import FormatCheckerAgent
 from passline.agents.language_checker import build_language_checker
+from passline.agents.findings_merger import FindingsMergerAgent
 from passline.agents.fixer_agent import build_fixer_agent
 from passline.agents.verifier_agent import VerifierAgent
 from passline.agents.reporter_agent import ReporterAgent
@@ -56,6 +58,9 @@ def build_pipeline(bus: EventBus, approval_queue: ApprovalQueue) -> SequentialAg
         description="Concurrent timing, format, and language checks",
     )
 
+    # Stage 2b — Merge all checker findings into all_findings
+    findings_merger = FindingsMergerAgent(name="findings_merger")
+
     # Stage 3 — Repair loop (max 3 passes)
     fixer = build_fixer_agent(bus=bus, approval_queue=approval_queue)
     verifier = VerifierAgent(name="verifier", bus=bus)
@@ -73,6 +78,6 @@ def build_pipeline(bus: EventBus, approval_queue: ApprovalQueue) -> SequentialAg
     # Full pipeline
     return SequentialAgent(
         name="delivery_pipeline",
-        sub_agents=[ingest, checker_fanout, repair_loop, reporter],
+        sub_agents=[ingest, checker_fanout, findings_merger, repair_loop, reporter],
         description="End-to-end subtitle QC and repair pipeline",
     )

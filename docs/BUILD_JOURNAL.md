@@ -48,6 +48,51 @@ python -m passline
 <!-- Append future missions below this line using the same heading structure -->
 ---
 
+## Mission 01.5 — Event Schema and ADK Agent Stub
+
+**Date:** August 20, 2026
+
+### What was built
+
+| Deliverable | Description |
+|---|---|
+| Event schema v1.0 | `DeliveryEvent` with `schema_version`, `event_id`, `event_type`, `timestamp`, `delivery_id`, `language`, `details` |
+| EventBus pub/sub skeleton | `subscribe()` / `unsubscribe()` stubs wired into the JSONL log |
+| ADK agent stub | `QcAgent(LlmAgent)` wrapping `gemini-2.0-flash` — structure only, no tool calls yet |
+| Schema version guard | Parser rejects events with unsupported `schema_version` |
+
+### Result
+
+**38 tests passing** — `python -m pytest`
+
+---
+
+## Mission 02 — Data Models and Event Bus
+
+**Date:** August 20, 2026
+
+### What was built
+
+| Deliverable | Description |
+|---|---|
+| `SubtitleCue` model | Pydantic v2 frozen model: `index`, `start_ms`, `end_ms`, `lines`, computed `cps`, `char_counts`, `total_chars`, `duration_ms` |
+| `SubtitleFile` model | Container with `cues`, `language`, `is_canonical`, `srt_dialect`, `parse_anomalies`, `skipped_blocks` |
+| `SrtDialect` | Tracks BOM, CRLF, trailing-blank to guarantee round-trip fidelity |
+| `EventBus` | Append-to-JSONL + async pub/sub with `subscribe()`/`unsubscribe()`/`emit()` |
+| `DeliveryEvent` | Schema v1.2 with serialise/deserialise round-trip |
+| 5 event types | `subtitle.submitted`, `station.working`, `station.ready`, `qc.violation`, `delivery.passed` |
+
+### Non-obvious decisions recorded
+
+- **Millisecond-only storage**: All timing is stored in integer milliseconds (`start_ms`, `end_ms`). No float seconds anywhere in the model tree. This eliminates an entire class of floating-point comparison bugs.
+- **Frozen models for cues**: `SubtitleCue` is frozen so agents can safely share references without mutation risk. Repair always creates a new cue via `model_copy(update=...)`.
+
+### Result
+
+**50 tests passing** — `python -m pytest`
+
+---
+
 ## Mission 03 — Mission Control Dashboard
 
 **Date:** August 20, 2026
@@ -221,4 +266,129 @@ python -m pytest tests/test_grading.py::test_corpus_grading_exact_match[en]
 
 # Run all property-based tests
 python -m pytest tests/test_rule_properties.py -v
+```
+
+---
+
+## Mission 06 — ADK Agent Graph
+
+**Date:** August 20, 2026
+
+### What was built
+
+| Deliverable | Description |
+|---|---|
+| `IngestAgent` | `BaseAgent` wrapping `parse_srt()`; writes `subtitle_file` to ADK session state |
+| `TimingCheckerAgent` | `BaseAgent` running timing rules; writes `timing_findings` to state |
+| `FormatCheckerAgent` | `BaseAgent` running format rules; writes `format_findings` to state |
+| `LanguageCheckerAgent` (v1) | `LlmAgent` with `output_schema=LanguageCheckerOutput`; callback approach |
+| `FixerAgent` | `LlmAgent` — deterministic fixes inline, language fixes via LLM + approval gate |
+| `VerifierAgent` | `BaseAgent` — re-runs rule engine; `escalate=True` when zero violations |
+| `ReporterAgent` | `BaseAgent` — writes repaired SRT bytes + delivery report to session state |
+| `build_pipeline()` | 4-stage `SequentialAgent`: ingest → fan-out → repair loop → reporter |
+| `ApprovalQueue` | Thread/async-safe queue with `await_decision()` suspension for human review |
+| `PipelineRunner` | `async run_delivery()` over ADK `Runner` + `InMemorySessionService` |
+| `LoopAgent` exit | `event.actions.escalate = True` pattern (not a callback) |
+| Coordinator | Root `LlmAgent` with pipeline as `sub_agent` |
+| 191 tests passing | All pipeline structure, approval queue, checker, verifier, and ingest tests |
+
+### Non-obvious decisions recorded
+
+- **`LoopAgent` exit via `escalate=True`**: The `LoopAgent` exits when any child event has `actions.escalate = True`. This is not a callback or a tool return — it is set directly on the yielded `Event`.
+- **`output_schema` + tools coexist in ADK 2.7.1**: Despite the docs suggesting otherwise, you can set `output_schema` on an `LlmAgent` that also has sub-agents (tools added by ADK internally).
+- **`object.__setattr__`** needed to patch frozen Pydantic Gemini model for retry callbacks.
+
+### Result
+
+**191 tests passing** — `python -m pytest`
+
+### Plan
+
+Authored before implementation: [`passline-mission06-plan.md`](../passline-mission06-plan.md)
+
+---
+
+## Mission 07 — Going Public
+
+**Date:** August 20, 2026
+
+### What was built
+
+| Deliverable | Description |
+|---|---|
+| `requirements.txt` | Exact pinned venv dependencies for Cloud Run buildpack |
+| `.python-version` | `3.12` pin for buildpack |
+| `Procfile` | `web: uvicorn passline.dashboard.app:app --host 0.0.0.0 --port $PORT` |
+| `.gcloudignore` | Excludes `.env`, `.venv`, test fixtures, plan files, pycache |
+| `PORT` env var | Dashboard `run()` prefers `PORT` then `PASSLINE_PORT` then `8000` |
+| `/tmp` log default | `_LOG_PATH` defaults to `/tmp/passline_events.jsonl` for container safety |
+| `LanguageCheckerAgent` rewrite | `BaseAgent` calling google-genai directly — no ADK callback magic; tenacity retry on 429 |
+| `FindingsMergerAgent` | New `BaseAgent` that merges `timing_findings + format_findings + language_findings → all_findings` before the repair loop; deduplicates by `(cue_index, rule)` |
+| Verifier language preservation | `VerifierAgent` now preserves MT01–MT06 language findings that are not superseded by deterministic findings after each repair pass |
+| Station event vocabulary | All 7 agents emit `station_id` / `station_name` matching the demo fixture; helper module `event_utils.py` centralises this |
+| `cue.analysis` event | `IngestAgent` emits per-cue CPS + duration data for the dashboard heat strip |
+| `qc.repaired` fields | `FixerAgent` emits `{rule, cue, original, repaired}` matching the demo fixture |
+| Demo chip → real pipeline | `triggerDemo()` JS now fetches `/api/demo/{lang}` and POSTs to `/api/upload`; no `startReplay()` |
+| `/api/demo/{lang}` | New FastAPI endpoint serving bundled broken corpus SRTs (EN/FR/DE) |
+| `/api/download/{id}` | New FastAPI endpoint returning repaired SRT bytes for a completed delivery |
+| `/api/reset` | Truncates the event log for a clean board take |
+| `get_repaired_bytes()` fix | Replaced sync `loop.run_until_complete()` crash with `async get_repaired_bytes()` |
+| FR/DE meaning-level corpus | Added vocabulary pairs present in the Blender TOS corpus; regenerated broken SRTs with ≥1 MEANING_LEVEL defect per language (FR: cues 24, 75; DE: cues 20, 66) |
+| `tests/conftest.py` | `--live-llm` CLI option + `live_llm` marker; merged with pre-existing fixtures |
+| `test_language_grading_meaning_level` | Parametrised over EN/FR/DE; skipped without `--live-llm` |
+| `tests/test_dashboard.py` | 19 async ASGI tests (httpx `ASGITransport`) covering all dashboard endpoints |
+| `tests/test_e2e_pipeline.py` | Full offline end-to-end test: LLM stubbed, approval gate driven concurrently |
+| Coordinator instruction fix | Replaced "invoke run_pipeline tool" with correct ADK `transfer_to_agent` delegation description |
+| Coordinator fallback | `after_agent_callback` runs pipeline directly if LLM fails to produce a `report` |
+| README fix | CI badge owner corrected (`luisyanza → yanzaaa`); quickstart updated; structure diagram updated; dashboard and deploy instructions added |
+| `.env.example` | All environment variables documented with defaults and comments |
+
+### Corpus defect counts after Mission 07 regeneration (seed=42)
+
+| Language | DETERMINISTIC | MEANING_LEVEL | Total |
+|---|---|---|---|
+| EN | 10 | 2 | 12 |
+| FR | 10 | 2 | 12 |
+| DE | 10 | 2 | 12 |
+
+### Non-obvious decisions recorded
+
+- **`asyncio.get_event_loop().run_until_complete()` breaks after anyio closes the loop**: Switching to `asyncio.run()` in all sync test helpers fixed the contamination.
+- **FR substitution words not in Blender TOS corpus**: The original FR pairs (`toujours`, `jamais`, etc.) don't appear in the specific SRT. Added common antonyms (`bien/mal`, `tout/rien`, `maintenant/jamais`) that ARE present.
+- **Demo corpus must be committed inside the package**: Cloud Run buildpacks include only the Python package source. Corpus files in `tests/` are excluded by `.gcloudignore`; the demo SRTs are copied to `passline/corpus/demo/` so they ship with the package.
+- **`PipelineRunner` runs under coordinator LLM**: For offline tests, bypass the coordinator and run `build_pipeline()` directly through an ADK `Runner` with a pre-populated session. The coordinator's LLM is unavailable without credentials.
+
+### Result
+
+**214 tests passing, 3 skipped** (live LLM tests behind `--live-llm`) — `python -m pytest`
+
+### Plan
+
+Authored before implementation: [`passline-mission07-plan.md`](../passline-mission07-plan.md)
+
+### Verification commands
+
+```bash
+source .venv/bin/activate
+
+# Full test suite (no credentials needed)
+python -m pytest
+
+# Run only dashboard tests
+python -m pytest tests/test_dashboard.py -v
+
+# Run end-to-end pipeline test (LLM stubbed)
+python -m pytest tests/test_e2e_pipeline.py -v
+
+# Run live LLM meaning-level grading (requires credentials)
+python -m pytest tests/test_grading.py -v --live-llm
+
+# Start the dashboard
+passline-dashboard
+open http://localhost:8000
+
+# Deploy to Cloud Run
+gcloud run deploy passline --source . --region us-central1 \
+  --allow-unauthenticated \
+  --set-env-vars GOOGLE_CLOUD_PROJECT=your-project-id
 ```

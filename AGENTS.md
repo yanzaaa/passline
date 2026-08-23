@@ -52,19 +52,20 @@ passline-dashboard
 | **Agents** | `passline/agents/` | Full ADK pipeline (Mission 06) |
 | **Pipeline** | `passline/pipeline/` | `ApprovalQueue`, `PipelineRunner` |
 
-## ADK Agent Graph (Mission 06)
+## ADK Agent Graph (Mission 07)
 
 ```
 RootCoordinator (LlmAgent, gemini-3-flash-preview)
 └── DeliveryPipeline (SequentialAgent)
-    ├── IngestAgent          BaseAgent — parse_srt, no LLM
+    ├── IngestAgent          BaseAgent — parse_srt, emits cue.analysis
     ├── CheckerFanout        ParallelAgent
-    │   ├── TimingCheckerAgent  BaseAgent — CPS/duration/overlap rules
-    │   ├── FormatCheckerAgent  BaseAgent — line_too_long/three_line_cue
-    │   └── LanguageCheckerAgent  LlmAgent, gemini-3.1-pro-preview, output_schema
+    │   ├── TimingCheckerAgent    BaseAgent — CPS/duration/overlap rules
+    │   ├── FormatCheckerAgent    BaseAgent — line_too_long/three_line_cue
+    │   └── LanguageCheckerAgent  BaseAgent — calls Gemini directly, tenacity retry
+    ├── FindingsMergerAgent  BaseAgent — merges all findings → all_findings
     ├── RepairLoop           LoopAgent, max_iterations=3
-    │   ├── FixerAgent       LlmAgent, gemini-3-flash-preview (LLM for text only)
-    │   └── VerifierAgent    BaseAgent — escalate=True when findings == 0
+    │   ├── FixerAgent       LlmAgent, gemini-3-flash-preview (LLM for language text only)
+    │   └── VerifierAgent    BaseAgent — escalate=True when combined findings == 0
     └── ReporterAgent        BaseAgent — write_srt, delivery verdict
 ```
 
@@ -73,13 +74,17 @@ RootCoordinator (LlmAgent, gemini-3-flash-preview)
 - **Single threshold source**: `passline/qc/thresholds.py` — both `corrupt.py` and `rules.py` import from it. Never define a threshold elsewhere.
 - **Math always from model properties**: `check_file()` uses `cue.cps`, `cue.duration_ms`, `cue.char_counts` — never re-implements math.
 - **LoopAgent exit via `escalate`**: Verifier sets exit by yielding `Event(actions=EventActions(escalate=True))` — NOT a callback. Max 3 iterations.
-- **`output_schema` + tools coexist in ADK 2.7.1**: No mutual exclusion. `LanguageCheckerAgent` has `output_schema=LanguageCheckerOutput` but no tools.
+- **`LanguageCheckerAgent` is `BaseAgent`**: calls `client.aio.models.generate_content` directly (not via ADK LlmAgent). No `output_schema` attribute.
+- **Station events must use `station_id`/`station_name`**: The dashboard reads `ev.details.station_id`. Do not use the old `{"station": name}` pattern. Use `event_utils.py` helpers.
+- **`FindingsMergerAgent` must come between `checker_fanout` and `repair_loop`**: The fixer reads `all_findings`; checkers write separate keys. The merger creates the combined list.
+- **Verifier preserves language findings**: MT01–MT06 findings are not re-run by the deterministic rule engine. `VerifierAgent` merges surviving language findings back after each pass.
 - **State writes**: Agents write `ctx.session.state` implicitly via `EventActions(state_delta={...})` on yielded events.
 - **Retry patch**: `install_retry_on_model()` from `callbacks.py` must use `object.__setattr__` on the Gemini model (Pydantic frozen). Called after agent construction.
 - **Approval queue gates**: `ApprovalQueue.await_decision(item_id)` is an async gate (`asyncio.Event`). The repair loop suspends in-place until ALL queued items are resolved.
 - **Corpus grading filter uses `(cue_index, rule)` pairs**, not just `cue_index`. Pre-existing Blender violations on the same cue as an injected defect are ignored by design.
 - **`write_file` tool redirects `passline/` paths** to workspace root. Always write `passline/` files via shell `cat >` with absolute paths.
-- **`asyncio.coroutine` removed in Python 3.12** — already patched in dashboard.
+- **`asyncio.run()` not `get_event_loop().run_until_complete()`**: After anyio-based async tests run, `get_event_loop()` returns a closed loop. All sync test helpers use `asyncio.run()`.
+- **Demo SRTs live in `passline/corpus/demo/`**: Committed inside the package so Cloud Run can serve them. `tests/corpus/broken/` is excluded by `.gcloudignore`.
 - **Schema version is `"1.2"`** — always has `event_id`, UTC enforcement.
 - **Pydantic v2** — `model_validator(mode='after')`, `model_config`, `.model_dump()`.
 - **Classic template workflow agents**: `SequentialAgent`, `ParallelAgent`, `LoopAgent` are deprecated in ADK 2.7.1 in favour of the graph workflow API, but they still work and are required by this project's spec. The deprecation warnings are expected and harmless.
@@ -88,19 +93,22 @@ RootCoordinator (LlmAgent, gemini-3-flash-preview)
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `PASSLINE_QC_MODEL` | `gemini-2.5-flash` | Gemini model for existing QC agent |
 | `PASSLINE_COORDINATOR_MODEL` | `gemini-3-flash-preview` | Root coordinator model |
 | `PASSLINE_LANG_MODEL` | `gemini-3.1-pro-preview` | Language checker model |
 | `PASSLINE_FIXER_MODEL` | `gemini-3-flash-preview` | Fixer agent model |
 | `GOOGLE_API_KEY` | — | Gemini Developer API key |
 | `GOOGLE_CLOUD_PROJECT` | — | GCP project for Vertex AI |
 | `GOOGLE_CLOUD_LOCATION` | `us-central1` | GCP location for Vertex AI |
-| `PASSLINE_LOG` | `passline_events.jsonl` | Event log path |
+| `PORT` | `8000` | Dashboard server port (Cloud Run sets this) |
+| `PASSLINE_LOG` | `/tmp/passline_events.jsonl` | Event log path |
 
 ## Testing
 
-- **191 tests passing**: `python -m pytest`
-- Pipeline tests in `tests/test_pipeline.py` (42 tests, fully offline — no LLM calls)
+- **214 tests passing, 3 skipped**: `python -m pytest`
+- `--live-llm` flag enables tests that make real LLM API calls
+- Pipeline tests in `tests/test_pipeline.py` — fully offline, no LLM calls
+- Dashboard tests in `tests/test_dashboard.py` — async ASGI via `httpx.ASGITransport`
+- End-to-end test in `tests/test_e2e_pipeline.py` — LLM stubbed with canned output
 - Golden SRT fixtures in `tests/fixtures/` — marked `binary` in `.gitattributes`
 - Corpus fixtures in `tests/corpus/` — seed=42, 3 languages, DETERMINISTIC/MEANING_LEVEL split
 - Property-based tests in `test_rule_properties.py` use `random.Random` with fixed seeds
@@ -121,6 +129,9 @@ RootCoordinator (LlmAgent, gemini-3-flash-preview)
 | `POST` | `/api/replay` | Start demo replay |
 | `POST` | `/api/stop` | Stop demo replay |
 | `POST` | `/api/upload` | Upload SRT → runs real pipeline |
+| `POST` | `/api/reset` | Truncate event log, stop replay |
+| `GET` | `/api/demo/{lang}` | Serve bundled broken corpus SRT (en/fr/de) |
+| `GET` | `/api/download/{id}` | Download repaired SRT bytes |
 | `GET` | `/api/queue` | List pending approval items |
 | `POST` | `/api/queue/{id}/approve` | Approve a pending item |
 | `POST` | `/api/queue/{id}/reject` | Reject a pending item |

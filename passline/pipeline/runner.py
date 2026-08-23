@@ -137,26 +137,28 @@ class PipelineRunner:
         })
         return report
 
-    def get_repaired_bytes(self) -> bytes | None:
-        """Return the repaired SRT bytes from the last delivery run.
+    async def get_repaired_bytes(self, delivery_id: str | None = None) -> bytes | None:
+        """Return the repaired SRT bytes for *delivery_id* (or the last run).
 
+        Reads directly from the ADK session state produced by ReporterAgent.
         Returns None if no run has been executed or if the reporter failed.
-        This is a synchronous helper — call from a sync context after awaiting
-        ``run_delivery``.
+        Async-safe: does not use ``loop.run_until_complete`` and is safe to
+        call from within a running event loop.
         """
-        if self._last_session_id is None:
+        session_id = (
+            f"delivery-{delivery_id}" if delivery_id else self._last_session_id
+        )
+        if session_id is None:
             return None
-        import asyncio
         try:
-            loop = asyncio.get_event_loop()
-            session = loop.run_until_complete(
-                self._session_service.get_session(
-                    app_name=_APP_NAME,
-                    user_id="pipeline",
-                    session_id=self._last_session_id,
-                )
+            session = await self._session_service.get_session(
+                app_name=_APP_NAME,
+                user_id="pipeline",
+                session_id=session_id,
             )
+            if session is None:
+                return None
             return session.state.get("repaired_bytes")
         except Exception as exc:
-            log.warning("get_repaired_bytes: %s", exc)
+            log.warning("get_repaired_bytes(%s): %s", session_id, exc)
             return None

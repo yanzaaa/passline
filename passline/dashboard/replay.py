@@ -4,6 +4,9 @@ Reads tests/fixtures/demo_events.jsonl and re-emits every event through the
 live EventBus with a fresh timestamp, preserving all other fields.  Pacing
 is driven by the ``replay_offset_s`` field in each event's ``details``.
 
+Each replay run uses a fresh delivery_id so repeated runs produce distinct
+delivery cards on the dashboard.
+
 Replayed events are written to the live JSONL log and are indistinguishable
 from real pipeline events to the dashboard.
 """
@@ -14,6 +17,7 @@ import json
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 if TYPE_CHECKING:
     from passline.events.bus import EventBus
@@ -41,13 +45,15 @@ def _load_fixture() -> list[dict]:
 async def _run_replay(bus: "EventBus", loop: bool = False) -> None:
     """Async task: re-emit fixture events at realistic pacing, optionally looping."""
     from passline.events.bus import DeliveryEvent, EventType
-    from datetime import datetime, timezone
 
     while True:
         events = _load_fixture()
         if not events:
             logger.warning("demo_events.jsonl is empty — nothing to replay")
             return
+
+        # Fresh delivery_id per run so repeated plays produce distinct dashboard cards
+        delivery_id = f"DEMO-{uuid4().hex[:8].upper()}"
 
         prev_offset = 0.0
         for raw in events:
@@ -61,7 +67,7 @@ async def _run_replay(bus: "EventBus", loop: bool = False) -> None:
             try:
                 event = DeliveryEvent(
                     event_type=EventType(raw["event_type"]),
-                    delivery_id=raw["delivery_id"],
+                    delivery_id=delivery_id,
                     language=raw["language"],
                     details=details,
                     # Fresh timestamp so log shows real wall-clock times

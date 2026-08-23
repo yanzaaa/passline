@@ -117,8 +117,8 @@ class TestPipelineStructure:
     def test_pipeline_name(self, pipeline: SequentialAgent) -> None:
         assert pipeline.name == "delivery_pipeline"
 
-    def test_pipeline_has_four_stages(self, pipeline: SequentialAgent) -> None:
-        assert len(pipeline.sub_agents) == 4
+    def test_pipeline_has_five_stages(self, pipeline: SequentialAgent) -> None:
+        assert len(pipeline.sub_agents) == 5
 
     def test_stage_1_is_ingest(self, pipeline: SequentialAgent) -> None:
         ingest = pipeline.sub_agents[0]
@@ -137,31 +137,106 @@ class TestPipelineStructure:
         assert "format_checker" in names
         assert "language_checker" in names
 
+    def test_stage_2b_is_findings_merger(self, pipeline: SequentialAgent) -> None:
+        from passline.agents.findings_merger import FindingsMergerAgent
+        merger = pipeline.sub_agents[2]
+        assert isinstance(merger, FindingsMergerAgent)
+        assert merger.name == "findings_merger"
+
     def test_stage_3_is_loop_agent(self, pipeline: SequentialAgent) -> None:
-        loop = pipeline.sub_agents[2]
+        loop = pipeline.sub_agents[3]
         assert isinstance(loop, LoopAgent)
         assert loop.name == "repair_loop"
 
     def test_loop_max_iterations_is_three(self, pipeline: SequentialAgent) -> None:
-        loop = pipeline.sub_agents[2]
+        loop = pipeline.sub_agents[3]
         assert loop.max_iterations == 3
 
     def test_loop_has_fixer_and_verifier(self, pipeline: SequentialAgent) -> None:
-        loop = pipeline.sub_agents[2]
+        loop = pipeline.sub_agents[3]
         names = [a.name for a in loop.sub_agents]
         assert "fixer" in names
         assert "verifier" in names
 
     def test_stage_4_is_reporter(self, pipeline: SequentialAgent) -> None:
         from passline.agents.reporter_agent import ReporterAgent
-        reporter = pipeline.sub_agents[3]
+        reporter = pipeline.sub_agents[4]
         assert isinstance(reporter, ReporterAgent)
         assert reporter.name == "reporter"
 
-    def test_language_checker_has_output_schema(self, pipeline: SequentialAgent) -> None:
+    def test_language_checker_is_base_agent(self, pipeline: SequentialAgent) -> None:
+        from passline.agents.language_checker import LanguageCheckerAgent
         fanout = pipeline.sub_agents[1]
         lang_checker = next(a for a in fanout.sub_agents if a.name == "language_checker")
-        assert lang_checker.output_schema is LanguageCheckerOutput
+        assert isinstance(lang_checker, LanguageCheckerAgent)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FindingsMergerAgent tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestFindingsMerger:
+    def test_merges_all_three_finding_types(self, tmp_bus: EventBus) -> None:
+        """FindingsMergerAgent combines timing, format, and language findings."""
+        from passline.agents.findings_merger import FindingsMergerAgent
+
+        merger = FindingsMergerAgent(name="findings_merger")
+        timing_f = {"rule": "cps_exceeded", "cue_index": 1, "severity": "ERROR"}
+        format_f = {"rule": "line_too_long", "cue_index": 2, "severity": "ERROR"}
+        lang_f   = {"rule": "MT01", "cue_index": 3, "confidence": 0.9}
+
+        async def run():
+            return await _run_agent_with_state(
+                merger,
+                {
+                    "timing_findings":   [timing_f],
+                    "format_findings":   [format_f],
+                    "language_findings": [lang_f],
+                },
+                tmp_bus,
+                session_id="s_merge",
+            )
+
+        state = asyncio.run(run())
+        all_findings = state.get("all_findings", [])
+        assert len(all_findings) == 3
+        rules = {f["rule"] for f in all_findings}
+        assert rules == {"cps_exceeded", "line_too_long", "MT01"}
+
+    def test_deduplicates_by_cue_index_and_rule(self, tmp_bus: EventBus) -> None:
+        """Duplicate (cue_index, rule) pairs are deduplicated; first wins."""
+        from passline.agents.findings_merger import FindingsMergerAgent
+
+        merger = FindingsMergerAgent(name="findings_merger2")
+        dup = {"rule": "line_too_long", "cue_index": 5, "severity": "ERROR"}
+
+        async def run():
+            return await _run_agent_with_state(
+                merger,
+                {
+                    "timing_findings":   [],
+                    "format_findings":   [dup, dup],  # same (cue, rule) twice
+                    "language_findings": [],
+                },
+                tmp_bus,
+                session_id="s_dedup",
+            )
+
+        state = asyncio.run(run())
+        assert len(state.get("all_findings", [])) == 1
+
+    def test_empty_inputs_yield_empty_all_findings(self, tmp_bus: EventBus) -> None:
+        from passline.agents.findings_merger import FindingsMergerAgent
+
+        merger = FindingsMergerAgent(name="findings_merger3")
+
+        async def run():
+            return await _run_agent_with_state(
+                merger, {}, tmp_bus, session_id="s_empty",
+            )
+
+        state = asyncio.run(run())
+        assert state.get("all_findings") == []
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -334,7 +409,7 @@ class TestApprovalQueue:
             asyncio.create_task(approve_later())
             return await approval_queue.await_decision(item.item_id)
 
-        decision = asyncio.get_event_loop().run_until_complete(run())
+        decision = asyncio.run(run())
         assert decision == "approved"
 
     def test_await_decision_reject(self, approval_queue: ApprovalQueue) -> None:
@@ -352,7 +427,7 @@ class TestApprovalQueue:
             asyncio.create_task(reject_later())
             return await approval_queue.await_decision(item.item_id)
 
-        decision = asyncio.get_event_loop().run_until_complete(run())
+        decision = asyncio.run(run())
         assert decision == "rejected"
 
     def test_item_to_dict(self, approval_queue: ApprovalQueue) -> None:
@@ -399,7 +474,7 @@ class TestVerifierExitCondition:
                     escalated = True
             return escalated
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.run(run())
         assert result, "Verifier must escalate when subtitle_file is clean"
 
     def test_verifier_does_not_escalate_on_violations(self, tmp_bus: EventBus) -> None:
@@ -423,7 +498,7 @@ class TestVerifierExitCondition:
                     escalated = True
             return escalated
 
-        result = asyncio.get_event_loop().run_until_complete(run())
+        result = asyncio.run(run())
         assert not result, "Verifier must NOT escalate when violations remain"
 
     def test_verifier_writes_findings_to_state(self, tmp_bus: EventBus) -> None:
@@ -439,7 +514,7 @@ class TestVerifierExitCondition:
                 session_id="s_findings",
             )
 
-        state = asyncio.get_event_loop().run_until_complete(run())
+        state = asyncio.run(run())
         findings = state.get("all_findings", [])
         assert isinstance(findings, list)
         assert len(findings) > 0, "Should have line_too_long finding"
@@ -465,7 +540,7 @@ class TestIngestAgent:
                 session_id="s_ingest",
             )
 
-        state = asyncio.get_event_loop().run_until_complete(run())
+        state = asyncio.run(run())
         sf_dict = state.get("subtitle_file")
         assert sf_dict is not None
         assert "cues" in sf_dict
@@ -484,7 +559,7 @@ class TestIngestAgent:
                 session_id="s_ingest2",
             )
 
-        asyncio.get_event_loop().run_until_complete(run())
+        asyncio.run(run())
         from passline.events.bus import EventType
         events = [e for e in tmp_bus.read_all() if hasattr(e, "event_type")]
         submitted = [e for e in events if e.event_type == EventType.SUBTITLE_SUBMITTED]
@@ -509,7 +584,7 @@ class TestCheckers:
                 session_id="s_timing",
             )
 
-        state = asyncio.get_event_loop().run_until_complete(run())
+        state = asyncio.run(run())
         findings = state.get("timing_findings", [])
         rules = [f["rule"] for f in findings]
         # 500ms, ~19 chars → ~38 CPS → cps_exceeded
@@ -528,7 +603,7 @@ class TestCheckers:
                 session_id="s_format",
             )
 
-        state = asyncio.get_event_loop().run_until_complete(run())
+        state = asyncio.run(run())
         findings = state.get("format_findings", [])
         rules = [f["rule"] for f in findings]
         assert "line_too_long" in rules
@@ -546,7 +621,7 @@ class TestCheckers:
                 session_id="s_format2",
             )
 
-        state = asyncio.get_event_loop().run_until_complete(run())
+        state = asyncio.run(run())
         findings = state.get("format_findings", [])
         assert findings == [], f"Clean file should produce no format findings; got {findings}"
 
@@ -563,6 +638,6 @@ class TestCheckers:
                 session_id="s_timing2",
             )
 
-        state = asyncio.get_event_loop().run_until_complete(run())
+        state = asyncio.run(run())
         findings = state.get("timing_findings", [])
         assert findings == [], f"Clean file should produce no timing findings; got {findings}"

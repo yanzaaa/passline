@@ -238,3 +238,82 @@ def test_sub_one_second_fires_on_corpus_cue() -> None:
     assert dur_findings, f"Expected sub_one_second on cue {dur_defect.cue_index}"
     from passline.qc.thresholds import MIN_DURATION_MS
     assert dur_findings[0].measured_value < MIN_DURATION_MS
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Language grading test — requires real LLM (opt-in via --live-llm)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.live_llm
+@pytest.mark.parametrize("lang", ["en", "fr", "de"])
+def test_language_grading_meaning_level(lang: str, tmp_path: Path) -> None:
+    """Language checker flags every MEANING_LEVEL manifest entry.
+
+    This test makes a real LLM API call — run with ``--live-llm`` to enable.
+
+    Pass criteria:
+      - For each MEANING_LEVEL defect in the manifest, the language checker
+        must return at least one flag whose ``cue_index`` matches.
+      - Zero false-positive flags on cues with no MEANING_LEVEL defect are
+        allowed (we only assert recall, not precision).
+    """
+    import asyncio
+    import os
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from passline.agents.language_checker import LanguageCheckerAgent, _call_genai_with_retry
+    from passline.agents.schemas import LanguageCheckerOutput, LanguageFlag
+    from passline.events.bus import EventBus
+
+    broken_data, broken_sf = _load_broken(lang)
+    manifest = _load_manifest(lang)
+
+    ml_defects = [d for d in manifest.defects if d.category == "MEANING_LEVEL"]
+    if not ml_defects:
+        pytest.skip(f"No MEANING_LEVEL defects in {lang} manifest")
+
+    # Check for API credentials
+    has_key = bool(os.getenv("GOOGLE_API_KEY") or os.getenv("GOOGLE_CLOUD_PROJECT"))
+    if not has_key:
+        pytest.skip("No LLM credentials set (GOOGLE_API_KEY or GOOGLE_CLOUD_PROJECT)")
+
+    from google.adk.runners import Runner
+    from google.adk.sessions.in_memory_session_service import InMemorySessionService
+    from google.genai import types as genai_types
+
+    bus = EventBus(tmp_path / "events.jsonl")
+    agent = LanguageCheckerAgent(name="language_checker", bus=bus)
+
+    async def run():
+        svc = InMemorySessionService()
+        await svc.create_session(
+            app_name="grading",
+            user_id="u1",
+            session_id="s1",
+            state={
+                "subtitle_file": broken_sf.model_dump(),
+                "language": lang,
+                "delivery_id": f"grade-{lang}",
+            },
+        )
+        runner = Runner(agent=agent, app_name="grading", session_service=svc)
+        async for _ in runner.run_async(
+            user_id="u1",
+            session_id="s1",
+            new_message=genai_types.Content(role="user", parts=[genai_types.Part(text="check")]),
+        ):
+            pass
+        session = await svc.get_session(app_name="grading", user_id="u1", session_id="s1")
+        return session.state.get("language_findings", [])
+
+    findings = asyncio.get_event_loop().run_until_complete(run())
+
+    flagged_cues = {f["cue_index"] for f in findings}
+    ml_cue_indices = {d.cue_index for d in ml_defects}
+
+    missed = ml_cue_indices - flagged_cues
+    assert not missed, (
+        f"[{lang}] Language checker MISSED meaning-level cue(s): {sorted(missed)}\n"
+        f"  Manifest ML defects: {[(d.cue_index, d.detail) for d in ml_defects]}\n"
+        f"  Checker found flags on cues: {sorted(flagged_cues)}"
+    )

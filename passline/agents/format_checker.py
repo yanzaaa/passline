@@ -23,6 +23,7 @@ from google.adk.agents.invocation_context import InvocationContext
 from google.adk.events.event import Event
 from google.adk.events.event_actions import EventActions
 
+from passline.agents.event_utils import emit_station_ready, emit_station_working
 from passline.events.bus import DeliveryEvent, EventBus, EventType
 from passline.models.subtitle import SubtitleFile
 from passline.qc.rules import Finding, check_file
@@ -40,6 +41,9 @@ _FORMAT_RULES = frozenset({
     "line_too_long",
     "three_line_cue",
 })
+
+_STATION_ID = "format"
+_STATION_NAME = "Format"
 
 
 class FormatCheckerAgent(BaseAgent):
@@ -64,12 +68,7 @@ class FormatCheckerAgent(BaseAgent):
             )
             return
 
-        self.bus.emit(DeliveryEvent(
-            event_type=EventType.STATION_WORKING,
-            delivery_id=delivery_id,
-            language=language,
-            details={"station": self.name},
-        ))
+        emit_station_working(self.bus, _STATION_ID, _STATION_NAME, delivery_id, language)
 
         subtitle_file = SubtitleFile.model_validate(subtitle_file_dict)
 
@@ -94,12 +93,10 @@ class FormatCheckerAgent(BaseAgent):
                 },
             ))
 
-        self.bus.emit(DeliveryEvent(
-            event_type=EventType.STATION_READY,
-            delivery_id=delivery_id,
-            language=language,
-            details={"station": self.name, "findings": len(format_findings)},
-        ))
+        emit_station_ready(
+            self.bus, _STATION_ID, _STATION_NAME, delivery_id, language,
+            findings=len(format_findings),
+        )
 
         log.debug("FormatCheckerAgent: %d format findings", len(format_findings))
 
