@@ -66,16 +66,6 @@
       "detail": "Cue 20: 3 lines (max is 2)"
     },
     {
-      "cue_index": 24,
-      "defect_type": "meaning_swap",
-      "rule": "meaning_changed",
-      "threshold": 0.0,
-      "measured_value": 0.0,
-      "severity": "WARNING",
-      "category": "MEANING_LEVEL",
-      "detail": "Cue 24: 'Rien' → 'Tout'"
-    },
-    {
       "cue_index": 26,
       "defect_type": "short_duration",
       "rule": "sub_one_second",
@@ -84,6 +74,16 @@
       "severity": "ERROR",
       "category": "DETERMINISTIC",
       "detail": "Cue 26: duration=400ms < 1000ms"
+    },
+    {
+      "cue_index": 42,
+      "defect_type": "meaning_swap",
+      "rule": "meaning_changed",
+      "threshold": 0.0,
+      "measured_value": 0.0,
+      "severity": "WARNING",
+      "category": "MEANING_LEVEL",
+      "detail": "Cue 42: 'Plus' → 'Moins'"
     },
     {
       "cue_index": 44,

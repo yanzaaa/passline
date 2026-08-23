@@ -190,6 +190,8 @@ def _apply_line_overflow(cue: SubtitleCue) -> SubtitleCue | None:
 
     Only eligible if the joined result exceeds the threshold.
     """
+    if cue.total_chars > 80:
+        return None
     if len(cue.lines) < 2:
         return None
     if any(c > LINE_CHAR_THRESHOLD for c in cue.char_counts):
@@ -215,6 +217,8 @@ def _apply_line_overflow(cue: SubtitleCue) -> SubtitleCue | None:
 
 def _apply_three_line_cue(cue: SubtitleCue) -> SubtitleCue | None:
     """Split the longest line at a word boundary to produce a third line."""
+    if cue.total_chars > 80:
+        return None
     if len(cue.lines) > 2:
         return None  # already 3+ lines
     # Find the longest line
@@ -503,6 +507,244 @@ def corrupt_file(
     manifest = CorpusManifest(
         language=language,
         source_file=source_filename,
+        seed=seed,
+        defects=injected_defects,
+    )
+
+    return CorruptionResult(
+        broken_file=broken_file,
+        broken_bytes=broken_bytes,
+        manifest=manifest,
+    )
+
+
+def corrupt_demo(
+    source: SubtitleFile,
+    seed: int,
+    language: str = "und",
+    excerpt_cues: int = 14,
+    defects: set[str] | None = None,
+) -> CorruptionResult:
+    """Produce a broken copy of *source* using the demo recipe constraints.
+
+    Parameters
+    ----------
+    source:
+        Clean parsed subtitle file.
+    seed:
+        Random seed for deterministic candidate selection.
+    language:
+        BCP-47 language code used for meaning-swap substitutions.
+    excerpt_cues:
+        Number of cues to slice from the beginning of the file (default: 14).
+    defects:
+        Set of defect type names to inject. None means {"cps_blowout", "line_overflow", "short_duration", "meaning_swap"}.
+    """
+    if defects is None:
+        defects = {"cps_blowout", "line_overflow", "short_duration", "meaning_swap"}
+
+    rng = __import__("random").Random(seed)
+
+    # Slice N cues and copy them, spacing them out to ensure they are clean and have ample timing room
+    # We must skip cues that are natively > 80 characters, as they can never be safely reflowed within 
+    # the 2-line/42-character limits and would permanently hold the delivery.
+    eligible_raw_cues = [c for c in source.cues if c.total_chars <= 80]
+    raw_cues = eligible_raw_cues[:excerpt_cues]
+    cues = []
+    current_time = 10000
+    for i, c in enumerate(raw_cues):
+        total_chars = sum(len(ln) for ln in c.lines)
+        # Safely space them so they start fully clean below 12.0 CPS
+        dur = max(3000, int(total_chars / 12.0 * 1000))
+        cues.append(
+            SubtitleCue(
+                index=i + 1,
+                start_ms=current_time,
+                end_ms=current_time + dur,
+                lines=list(c.lines)
+            )
+        )
+        current_time += dur + 2500  # 2500ms of open air / gap
+
+    injected_defects: list[DefectSpec] = []
+    used_cue_indices: set[int] = set()
+
+    def reserve(idx: int) -> bool:
+        if idx in used_cue_indices:
+            return False
+        used_cue_indices.add(idx)
+        if idx - 1 >= 0:
+            used_cue_indices.add(idx - 1)
+        if idx + 1 < len(cues):
+            used_cue_indices.add(idx + 1)
+        return True
+
+    def is_timing_safe(idx: int) -> bool:
+        if idx > 0:
+            if cues[idx].start_ms - cues[idx - 1].end_ms < 2000:
+                return False
+        if idx < len(cues) - 1:
+            if cues[idx + 1].start_ms - cues[idx].end_ms < 2000:
+                return False
+        return True
+
+    def is_repairable_timing(idx: int, target_cps: float = 16.0) -> bool:
+        cue = cues[idx]
+        total_chars = cue.total_chars
+        if total_chars == 0:
+            return True
+        # Milliseconds required to sit strictly below target_cps
+        req_ms = int(total_chars / target_cps * 1000) + 1
+        # Own duration plus gap before the following cue
+        available_ms = cue.duration_ms
+        if idx + 1 < len(cues):
+            available_ms += (cues[idx + 1].start_ms - cue.end_ms) - 50
+        else:
+            available_ms += 10000
+        
+        return available_ms >= req_ms
+
+    # ── 1. Meaning swap ──────────────────────────────────────────────────────
+    if "meaning_swap" in defects:
+        pairs = get_substitutions(language)
+        candidates = []
+        for i, c in enumerate(cues):
+            for line in c.lines:
+                test_text, orig_w, new_w = _substitute_text(line, pairs, rng)
+                if orig_w is not None:
+                    candidates.append((i, line, test_text, orig_w, new_w))
+                    break  # one substitution per cue
+        if candidates:
+            pick_item = rng.choice(candidates)
+            i, orig_line, new_text, orig_w, new_w = pick_item
+            if reserve(i):
+                old_cue = cues[i]
+                new_lines = [
+                    new_text if ln == orig_line else ln
+                    for ln in old_cue.lines
+                ]
+                mutated = SubtitleCue(
+                    index=old_cue.index,
+                    start_ms=old_cue.start_ms,
+                    end_ms=old_cue.end_ms,
+                    lines=new_lines,
+                )
+                cues[i] = mutated
+                injected_defects.append(DefectSpec(
+                    cue_index=mutated.index,
+                    defect_type="meaning_swap",
+                    rule="meaning_changed",
+                    threshold=0.0,
+                    measured_value=0.0,
+                    severity="WARNING",
+                    category="MEANING_LEVEL",
+                    detail=f"Cue {mutated.index}: '{orig_w}' → '{new_w}'",
+                ))
+
+    # ── 2. Other timing/layout defects (loop until target count of 6) ────────
+    other_defect_types = [d for d in defects if d != "meaning_swap"]
+    if other_defect_types:
+        attempts = 0
+        while len(injected_defects) < 6 and attempts < 100:
+            attempts += 1
+            valid_candidates = []
+            for d_type in other_defect_types:
+                if d_type == "cps_blowout":
+                    valid_candidates.extend([
+                        (i, d_type) for i, c in enumerate(cues)
+                        if i not in used_cue_indices
+                        and _apply_cps_blowout(c) is not None
+                        and c.total_chars <= 80
+                        and is_timing_safe(i)
+                        and is_repairable_timing(i)
+                    ])
+                elif d_type == "line_overflow":
+                    valid_candidates.extend([
+                        (i, d_type) for i, c in enumerate(cues)
+                        if i not in used_cue_indices
+                        and _apply_line_overflow(c) is not None
+                        and c.total_chars <= 80
+                    ])
+                elif d_type == "short_duration":
+                    valid_candidates.extend([
+                        (i, d_type) for i, c in enumerate(cues)
+                        if i not in used_cue_indices
+                        and _apply_short_duration(c) is not None
+                        and is_timing_safe(i)
+                        and is_repairable_timing(i)
+                    ])
+            
+            if not valid_candidates:
+                break
+                
+            pick_i, pick_dtype = rng.choice(valid_candidates)
+            if reserve(pick_i):
+                if pick_dtype == "cps_blowout":
+                    mutated = _apply_cps_blowout(cues[pick_i])
+                    if mutated is not None:
+                        cues[pick_i] = mutated
+                        injected_defects.append(DefectSpec(
+                            cue_index=mutated.index,
+                            defect_type="cps_blowout",
+                            rule="cps_exceeded",
+                            threshold=CPS_THRESHOLD,
+                            measured_value=round(mutated.cps, 2),
+                            severity="ERROR",
+                            category="DETERMINISTIC",
+                            detail=(
+                                f"Cue {mutated.index}: CPS={mutated.cps:.2f} > {CPS_THRESHOLD} "
+                                f"(dur={mutated.duration_ms}ms, chars={mutated.total_chars})"
+                            ),
+                        ))
+                elif pick_dtype == "line_overflow":
+                    mutated = _apply_line_overflow(cues[pick_i])
+                    if mutated is not None:
+                        cues[pick_i] = mutated
+                        max_line = max(mutated.char_counts)
+                        injected_defects.append(DefectSpec(
+                            cue_index=mutated.index,
+                            defect_type="line_overflow",
+                            rule="line_too_long",
+                            threshold=LINE_CHAR_THRESHOLD,
+                            measured_value=float(max_line),
+                            severity="ERROR",
+                            category="DETERMINISTIC",
+                            detail=(
+                                f"Cue {mutated.index}: longest line={max_line} chars > {LINE_CHAR_THRESHOLD}"
+                            ),
+                        ))
+                elif pick_dtype == "short_duration":
+                    mutated = _apply_short_duration(cues[pick_i])
+                    if mutated is not None:
+                        cues[pick_i] = mutated
+                        injected_defects.append(DefectSpec(
+                            cue_index=mutated.index,
+                            defect_type="short_duration",
+                            rule="sub_one_second",
+                            threshold=float(MIN_DURATION_MS),
+                            measured_value=float(mutated.duration_ms),
+                            severity="ERROR",
+                            category="DETERMINISTIC",
+                            detail=(
+                                f"Cue {mutated.index}: duration={mutated.duration_ms}ms < {MIN_DURATION_MS}ms"
+                            ),
+                        ))
+
+    # ── Sort defects by cue_index for deterministic manifest ordering ────────
+    injected_defects.sort(key=lambda d: d.cue_index)
+
+    # ── Build broken SubtitleFile and serialise ──────────────────────────────
+    broken_file = SubtitleFile(
+        cues=cues,
+        language=language,
+        source_path=None,
+        srt_dialect=SrtDialect(trailing_blank=True),
+    )
+    broken_bytes = write_srt(broken_file)
+
+    manifest = CorpusManifest(
+        language=language,
+        source_file=source.source_path or "clean_source.srt",
         seed=seed,
         defects=injected_defects,
     )

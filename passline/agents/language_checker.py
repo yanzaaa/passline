@@ -261,6 +261,8 @@ class LanguageCheckerAgent(BaseAgent):
                     "severity":    "WARNING",
                     "explanation": flag.explanation,
                     "checker":     "language",
+                    "rule_ref":    flag.rule_ref,
+                    "confidence":  flag.confidence,
                 },
             ))
 

@@ -4,7 +4,7 @@ Provides a simple async coroutine interface:
 
     runner = PipelineRunner(bus=bus, approval_queue=approval_queue)
     report = await runner.run_delivery(srt_bytes, language="en")
-    repaired_bytes = runner.get_repaired_bytes()
+    repaired_bytes = await runner.get_repaired_bytes()
 
 Uses ``InMemorySessionService`` — one session per delivery run.
 """
@@ -57,6 +57,7 @@ class PipelineRunner:
         srt_bytes: bytes,
         language: str = "und",
         delivery_id: str | None = None,
+        parent_id: str | None = None,
     ) -> dict[str, Any]:
         """Run the full QC pipeline on *srt_bytes* and return the delivery report.
 
@@ -68,6 +69,8 @@ class PipelineRunner:
             ISO language code (e.g. ``"en"``, ``"fr"``, ``"de"``).
         delivery_id:
             Optional identifier for this delivery run.  Auto-generated if None.
+        parent_id:
+            Optional identifier for parent delivery.
 
         Returns
         -------
@@ -81,24 +84,32 @@ class PipelineRunner:
         # Wire approval queue bus (in case it was set up after queue creation)
         self._approval_queue.set_bus(self._bus)
 
+        start_details = {"stage": "pipeline_start", "bytes": len(srt_bytes)}
+        if parent_id:
+            start_details["parent_id"] = parent_id
+
         # Emit start event
         self._bus.emit(DeliveryEvent(
             event_type=EventType.SUBTITLE_SUBMITTED,
             delivery_id=delivery_id,
             language=language,
-            details={"stage": "pipeline_start", "bytes": len(srt_bytes)},
+            details=start_details,
         ))
 
         # Pre-populate session state with the input data
+        state = {
+            "srt_bytes": srt_bytes,
+            "language": language,
+            "delivery_id": delivery_id,
+        }
+        if parent_id:
+            state["parent_id"] = parent_id
+
         await self._session_service.create_session(
             app_name=_APP_NAME,
             user_id="pipeline",
             session_id=session_id,
-            state={
-                "srt_bytes": srt_bytes,
-                "language": language,
-                "delivery_id": delivery_id,
-            },
+            state=state,
         )
 
         runner = self._build_runner()
@@ -135,6 +146,8 @@ class PipelineRunner:
             "verdict": "unknown",
             "note": "pipeline completed but report not written",
         })
+        if "language_findings" in session.state:
+            report["language_findings"] = session.state["language_findings"]
         return report
 
     async def get_repaired_bytes(self, delivery_id: str | None = None) -> bytes | None:

@@ -49,7 +49,8 @@ class FindingsMergerAgent(BaseAgent):
         seen: set[tuple] = set()
 
         for finding in (*timing, *fmt, *language):
-            key = (finding.get("cue_index"), finding.get("rule"))
+            cue = finding.get("cue_index") or finding.get("cue")
+            key = (cue, finding.get("rule"))
             if key not in seen:
                 seen.add(key)
                 merged.append(finding)

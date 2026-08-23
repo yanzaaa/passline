@@ -14,9 +14,25 @@ from pathlib import Path
 
 import pytest
 
+from unittest.mock import patch
+
 from passline.events.bus import EventBus
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
+
+# ── Global Mocks ─────────────────────────────────────────────────────────────
+
+@pytest.fixture(autouse=True)
+def _mock_genai_client(request: pytest.FixtureRequest):
+    """Ensure no real google.genai.Client is instantiated during hermetic tests.
+
+    If a test is marked with @pytest.mark.live_llm, the real client is allowed.
+    """
+    if request.node.get_closest_marker("live_llm"):
+        yield
+        return
+    with patch("google.genai.Client") as mock:
+        yield mock
 
 
 # ── Standard SRT fixtures ────────────────────────────────────────────────────

@@ -76,11 +76,12 @@ open http://localhost:8000
 ```
 
 The dashboard supports:
-- **▶ PLAY** — replay a pre-recorded demo delivery run
-- **Demo chips** (EN-001 / FR-002 / JA-003) — upload a bundled broken corpus file
-  and run the real QC pipeline end-to-end
+- **▶ PLAY** — replay a pre-recorded demo delivery run (shows the orange **REPLAY** tag; replay cards offer no dead download links)
+- **Demo chips** (English / French / German / Hopeless Case) — upload the newly generated demo-grade broken excerpt files or the hopeless control, running the real E2E pipeline (shows the green **LIVE** tag)
+- **⚡ BREAK THIS FILE** — takes the repaired output of the last cleared delivery, corrupts it server-side, and feeds it straight back through the pipeline as a new child delivery.
+- **▶ Briefing** — after a delivery clears or fails, click to listen to a 25-second spoken E2E summary generated with three distinct prebuilt Google GenAI voices.
 - **Drop zone** — drop any `.srt` file to run it through the pipeline
-- **RESET** — clear the board for a clean take
+- **RESET** — clear the board for a clean take (cards, logs, station meters, charts, countdown all return to initial slate)
 - **Approval queue** — approve or reject language-level repairs via the UI
 
 ---
@@ -147,6 +148,8 @@ docs/
 | `PORT` | `8000` | Dashboard server port (Cloud Run sets this) |
 | `PASSLINE_PORT` | `8000` | Dashboard server port (alternative) |
 | `PASSLINE_LOG` | `/tmp/passline_events.jsonl` | Event log path |
+| `PASSLINE_TTS_ENABLED` | `true` | Enable speech briefing audio generation |
+| `PASSLINE_TTS_MAX_GENERATIONS` | `50` | Maximum speech briefing generations per server process |
 
 See `.env.example` for a ready-to-copy template.
 

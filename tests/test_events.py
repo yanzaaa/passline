@@ -48,7 +48,7 @@ class TestEventEmission:
     ) -> None:
         parse_srt(sample_srt_bytes, delivery_id="x", bus=tmp_event_log)
         event = tmp_event_log.read_all()[0]
-        assert event.schema_version == "1.2"  # type: ignore[union-attr]
+        assert event.schema_version == "1.3"  # type: ignore[union-attr]
 
     def test_event_timestamp_utc(
         self, sample_srt_bytes: bytes, tmp_event_log: EventBus
@@ -106,7 +106,7 @@ class TestEventBusPersistence:
         assert retrieved.delivery_id == original.delivery_id
         assert retrieved.language == original.language
         assert retrieved.details == original.details
-        assert retrieved.schema_version == "1.2"
+        assert retrieved.schema_version == "1.3"
 
     def test_jsonl_lines_are_valid_json(self, tmp_event_log: EventBus) -> None:
         """Every line in the log must be a self-contained valid JSON object."""
@@ -228,7 +228,7 @@ class TestForwardCompat:
         """An unknown event_type produces an UnknownDeliveryEvent, not a crash."""
         # Inject a line with a future event_type directly into the log
         raw = json.dumps({
-            "schema_version": "1.2",
+            "schema_version": "1.3",
             "event_id": "abc-123",
             "event_type": "future.event_type_not_yet_defined",
             "timestamp": "2026-08-20T10:00:00.000000Z",

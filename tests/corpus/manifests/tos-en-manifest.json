@@ -56,6 +56,16 @@
       "detail": "Cue 13: duration=400ms < 1000ms"
     },
     {
+      "cue_index": 14,
+      "defect_type": "meaning_swap",
+      "rule": "meaning_changed",
+      "threshold": 0.0,
+      "measured_value": 0.0,
+      "severity": "WARNING",
+      "category": "MEANING_LEVEL",
+      "detail": "Cue 14: 'fault' → 'merit'"
+    },
+    {
       "cue_index": 16,
       "defect_type": "short_duration",
       "rule": "sub_one_second",
@@ -66,24 +76,14 @@
       "detail": "Cue 16: duration=400ms < 1000ms"
     },
     {
-      "cue_index": 22,
+      "cue_index": 28,
       "defect_type": "meaning_swap",
       "rule": "meaning_changed",
       "threshold": 0.0,
       "measured_value": 0.0,
       "severity": "WARNING",
       "category": "MEANING_LEVEL",
-      "detail": "Cue 22: 'love' → 'hate'"
-    },
-    {
-      "cue_index": 32,
-      "defect_type": "meaning_swap",
-      "rule": "meaning_changed",
-      "threshold": 0.0,
-      "measured_value": 0.0,
-      "severity": "WARNING",
-      "category": "MEANING_LEVEL",
-      "detail": "Cue 32: 'love' → 'hate'"
+      "detail": "Cue 28: 'love' → 'hate'"
     },
     {
       "cue_index": 47,

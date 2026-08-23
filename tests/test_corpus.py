@@ -31,6 +31,7 @@ from passline.corpus.corrupt import (
     MIN_DURATION_MS,
     CorpusManifest,
     corrupt_file,
+    corrupt_demo,
     _apply_cps_blowout,
     _apply_line_overflow,
     _apply_overlap,
@@ -496,3 +497,35 @@ class TestCorruptCLI:
         manifest = json.loads(out_json.read_text())
         assert "defects" in manifest
         assert manifest["seed"] == 42
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# corrupt_demo tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestCorruptDemo:
+    def test_corrupt_demo_deterministic_and_bounded(self, clean_files: dict) -> None:
+        """corrupt_demo produces deterministic outputs and satisfies adjacent spacing constraints."""
+        source = clean_files["en"]
+        res1 = corrupt_demo(source, seed=7, language="en", excerpt_cues=14)
+        res2 = corrupt_demo(source, seed=7, language="en", excerpt_cues=14)
+
+        # Determinism
+        assert res1.broken_bytes == res2.broken_bytes
+        assert len(res1.manifest.defects) == len(res2.manifest.defects)
+
+        # Check bounded size and adjacent-spacing
+        cues_count = len(res1.broken_file.cues)
+        assert cues_count == 14
+
+        defect_indices = [d.cue_index for d in res1.manifest.defects]
+        # Target roughly six to eight defects
+        assert len(defect_indices) >= 1
+        assert len(defect_indices) <= 8
+
+        # Adjacent spacing check
+        for i in range(len(defect_indices)):
+            for j in range(i + 1, len(defect_indices)):
+                assert abs(defect_indices[i] - defect_indices[j]) > 1, \
+                    f"Defects at adjacent cues: {defect_indices[i]} and {defect_indices[j]}"
+

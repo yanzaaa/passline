@@ -1,0 +1,139 @@
+{
+  "schema_version": "1.0",
+  "corpus_version": "1",
+  "language": "de",
+  "source_file": "tests/corpus/clean/tos-de.srt",
+  "seed": 13,
+  "defects": [
+    {
+      "cue_index": 2,
+      "defect_type": "auto-detected",
+      "rule": "cps_exceeded",
+      "threshold": 20.0,
+      "measured_value": 140.0,
+      "severity": "ERROR",
+      "category": "rule",
+      "detail": "Rule cps_exceeded triggered"
+    },
+    {
+      "cue_index": 2,
+      "defect_type": "auto-detected",
+      "rule": "line_too_long",
+      "threshold": 42.0,
+      "measured_value": 56.0,
+      "severity": "ERROR",
+      "category": "rule",
+      "detail": "Rule line_too_long triggered"
+    },
+    {
+      "cue_index": 2,
+      "defect_type": "auto-detected",
+      "rule": "sub_one_second",
+      "threshold": 1000.0,
+      "measured_value": 400.0,
+      "severity": "ERROR",
+      "category": "rule",
+      "detail": "Rule sub_one_second triggered"
+    },
+    {
+      "cue_index": 4,
+      "defect_type": "auto-detected",
+      "rule": "cps_exceeded",
+      "threshold": 20.0,
+      "measured_value": 100.0,
+      "severity": "ERROR",
+      "category": "rule",
+      "detail": "Rule cps_exceeded triggered"
+    },
+    {
+      "cue_index": 4,
+      "defect_type": "auto-detected",
+      "rule": "sub_one_second",
+      "threshold": 1000.0,
+      "measured_value": 400.0,
+      "severity": "ERROR",
+      "category": "rule",
+      "detail": "Rule sub_one_second triggered"
+    },
+    {
+      "cue_index": 6,
+      "defect_type": "auto-detected",
+      "rule": "cps_exceeded",
+      "threshold": 20.0,
+      "measured_value": 165.0,
+      "severity": "ERROR",
+      "category": "rule",
+      "detail": "Rule cps_exceeded triggered"
+    },
+    {
+      "cue_index": 6,
+      "defect_type": "auto-detected",
+      "rule": "sub_one_second",
+      "threshold": 1000.0,
+      "measured_value": 400.0,
+      "severity": "ERROR",
+      "category": "rule",
+      "detail": "Rule sub_one_second triggered"
+    },
+    {
+      "cue_index": 7,
+      "defect_type": "auto-detected",
+      "rule": "line_too_long",
+      "threshold": 42.0,
+      "measured_value": 45.0,
+      "severity": "ERROR",
+      "category": "rule",
+      "detail": "Rule line_too_long triggered"
+    },
+    {
+      "cue_index": 9,
+      "defect_type": "auto-detected",
+      "rule": "cps_exceeded",
+      "threshold": 20.0,
+      "measured_value": 22.006713912719135,
+      "severity": "ERROR",
+      "category": "rule",
+      "detail": "Rule cps_exceeded triggered"
+    },
+    {
+      "cue_index": 9,
+      "defect_type": "auto-detected",
+      "rule": "line_too_long",
+      "threshold": 42.0,
+      "measured_value": 59.0,
+      "severity": "ERROR",
+      "category": "rule",
+      "detail": "Rule line_too_long triggered"
+    },
+    {
+      "cue_index": 14,
+      "defect_type": "auto-detected",
+      "rule": "cps_exceeded",
+      "threshold": 20.0,
+      "measured_value": 22.026431718061673,
+      "severity": "ERROR",
+      "category": "rule",
+      "detail": "Rule cps_exceeded triggered"
+    },
+    {
+      "cue_index": 14,
+      "defect_type": "auto-detected",
+      "rule": "sub_one_second",
+      "threshold": 1000.0,
+      "measured_value": 681.0,
+      "severity": "ERROR",
+      "category": "rule",
+      "detail": "Rule sub_one_second triggered"
+    },
+    {
+      "cue_index": 12,
+      "defect_type": "meaning_swap",
+      "rule": "meaning_changed",
+      "threshold": 0.0,
+      "measured_value": 0.0,
+      "severity": "WARNING",
+      "category": "MEANING_LEVEL",
+      "detail": "Cue 12: 'Nacht' → 'Tag'"
+    }
+  ]
+}

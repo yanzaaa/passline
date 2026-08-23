@@ -44,6 +44,9 @@ class EventType(str, Enum):
     CUE_ANALYSIS = "cue.analysis"
     APPROVAL_REQUIRED = "approval.required"
 
+    # ── Schema 1.3 — honest-fail events ──────────────────────────────────────
+    DELIVERY_FAILED = "delivery.failed"
+
 
 class DeliveryEvent(BaseModel):
     """A single versioned delivery pipeline event.
@@ -54,7 +57,7 @@ class DeliveryEvent(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    schema_version: str = "1.2"
+    schema_version: str = "1.3"
     """Schema version for forward-compatibility with consumers."""
 
     event_id: str = Field(default_factory=lambda: str(uuid.uuid4()))

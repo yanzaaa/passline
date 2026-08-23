@@ -49,7 +49,7 @@ from passline.agents.event_utils import emit_station_ready, emit_station_working
 from passline.events.bus import DeliveryEvent, EventBus, EventType
 from passline.models.subtitle import SubtitleCue, SubtitleFile
 from passline.pipeline.approval import ApprovalQueue
-from passline.qc.thresholds import CPS_VIOLATION, LINE_CHAR_MAX, MIN_DURATION_MS
+from passline.qc.thresholds import CPS_VIOLATION, CPS_WARNING_LOW, LINE_CHAR_MAX, MIN_DURATION_MS
 
 log = logging.getLogger(__name__)
 
@@ -131,24 +131,28 @@ def _apply_deterministic_fix(
         new_lines: list[str] = []
         for line in cue.lines:
             new_lines.extend(_split_long_line(line))
-        cue_list[idx] = cue.model_copy(update={"lines": new_lines[:3]})
+        # Do not truncate text. If reflowing creates > 2 lines, leave it unfixable
+        # if it can't fit in 3 lines either, we don't truncate text.
+        # Actually, standard is max 2 lines, but 3 lines is flagged. If we just created >3 lines, we cannot fix it easily.
+        # Let's just update if it fits in 2 or 3 lines. If it's > 3 lines, leave unchanged.
+        if len(new_lines) <= 3:
+            cue_list[idx] = cue.model_copy(update={"lines": new_lines})
 
     elif rule == "three_line_cue":
         if len(cue.lines) > 2:
-            # Join last two lines if combined visible length ≤ LINE_CHAR_MAX
+            # Join last two lines if combined visible length <= LINE_CHAR_MAX
             from passline.models.subtitle import _strip_markup
             combined = cue.lines[-2].rstrip() + " " + cue.lines[-1].lstrip()
             if len(_strip_markup(combined).rstrip()) <= LINE_CHAR_MAX:
                 new_lines = list(cue.lines[:-2]) + [combined]
-            else:
-                new_lines = list(cue.lines[:2])
-            cue_list[idx] = cue.model_copy(update={"lines": new_lines})
+                cue_list[idx] = cue.model_copy(update={"lines": new_lines})
+            # else: do not discard the third line; leave unchanged as unfixable.
 
     elif rule in ("cps_exceeded", "cps_warning"):
-        # Extend end_ms so CPS drops to just below CPS_VIOLATION
+        # Extend end_ms so CPS drops to just below CPS_WARNING_LOW (clean state)
         chars = cue.total_chars
         if chars > 0:
-            new_duration_ms = int(chars / CPS_VIOLATION * 1000) + 1
+            new_duration_ms = int(chars / CPS_WARNING_LOW * 1000) + 1
             new_end_ms = cue.start_ms + new_duration_ms
             # Don't extend into the next cue (leave 50ms gap)
             if idx + 1 < len(cue_list):
@@ -218,6 +222,9 @@ class FixerAgent(LlmAgent):
         subtitle_file = SubtitleFile.model_validate(subtitle_file_dict)
         cues = list(subtitle_file.cues)
         repair_log: list[dict] = list(existing_repair_log)
+        
+        resolved_language_findings: list[dict] = []
+        unresolved_findings: list[dict] = []
 
         for finding in all_findings_dicts:
             rule = finding.get("rule", "")
@@ -244,11 +251,13 @@ class FixerAgent(LlmAgent):
                         language=language,
                         details={
                             "rule":     rule,
+                            "rule_ref": rule,
                             "cue":      cue_index,
                             "original": original_text,
                             "repaired": repaired_text,
                         },
                     ))
+                unresolved_findings.append(finding)
 
             else:
                 # ── Language-level repair via LLM ─────────────────────────
@@ -265,6 +274,7 @@ class FixerAgent(LlmAgent):
                 # calling the parent LlmAgent with a focused prompt.
                 # For simplicity: use the explanation as guidance.
                 explanation = finding.get("explanation", "Language quality issue")
+                rule_ref = finding.get("rule_ref") or finding.get("rule", "Unknown")
                 proposed_text = await self._propose_language_fix(
                     original_text, explanation, language
                 )
@@ -276,7 +286,7 @@ class FixerAgent(LlmAgent):
                         cue_index=cue_index,
                         original_text=original_text,
                         proposed_text=proposed_text,
-                        reason=f"[{rule}] {explanation}",
+                        reason=f"[{rule_ref}] {explanation}",
                     )
                     self.approval_queue.enqueue(item)
                     # Suspend loop until human decides
@@ -289,6 +299,8 @@ class FixerAgent(LlmAgent):
                             cues[idx] = cues[idx].model_copy(update={"lines": new_lines})
                         repair_entry = {
                             "rule": rule,
+                            "rule_ref": rule_ref,
+                            "cue": cue_index,
                             "cue_index": cue_index,
                             "type": "language",
                             "approved": True,
@@ -302,6 +314,7 @@ class FixerAgent(LlmAgent):
                             language=language,
                             details=repair_entry,
                         ))
+                        resolved_language_findings.append(finding)
                     else:
                         repair_log.append({
                             "rule": rule,
@@ -311,9 +324,25 @@ class FixerAgent(LlmAgent):
                             "original": original_text,
                             "proposed": proposed_text,
                         })
+                        unresolved_findings.append(finding)
+                else:
+                    unresolved_findings.append(finding)
 
         # Rebuild the SubtitleFile with repaired cues
         repaired_file = subtitle_file.model_copy(update={"cues": cues})
+        
+        state_delta = {
+            STATE_SUBTITLE_FILE: repaired_file.model_dump(),
+            STATE_REPAIR_LOG: repair_log,
+            STATE_ALL_FINDINGS: unresolved_findings,
+        }
+        
+        if resolved_language_findings:
+            existing_lang = ctx.session.state.get("language_findings", [])
+            if existing_lang:
+                resolved_keys = {(f.get("cue_index"), f.get("rule_ref") or f.get("rule")) for f in resolved_language_findings}
+                new_lang = [f for f in existing_lang if (f.get("cue_index"), f.get("rule_ref") or f.get("rule")) not in resolved_keys]
+                state_delta["language_findings"] = new_lang
 
         emit_station_ready(
             self.bus, _STATION_ID, _STATION_NAME, delivery_id, language,
@@ -322,10 +351,7 @@ class FixerAgent(LlmAgent):
 
         yield Event(
             author=self.name,
-            actions=EventActions(state_delta={
-                STATE_SUBTITLE_FILE: repaired_file.model_dump(),
-                STATE_REPAIR_LOG: repair_log,
-            }),
+            actions=EventActions(state_delta=state_delta),
         )
 
     async def _propose_language_fix(

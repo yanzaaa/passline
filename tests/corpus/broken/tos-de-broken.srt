@@ -51,7 +51,7 @@ Solltest du nicht da unten sein?
 
 13
 00:02:11,000 --> 00:02:13,000
-Ich habe euch gestern Nacht reden hören.
+Ich habe euch gestern Tag reden hören.
 
 14
 00:02:16,000 --> 00:02:16,400
@@ -79,7 +79,8 @@ Okay, perfekt.
 
 20
 00:03:23,500 --> 00:03:26,500
-Gleich geht's los! Keine Systeme starten!
+Gleich geht's los!
+Alle Systeme starten!
 Ja genau, ihr, los!
 
 21
@@ -176,7 +177,7 @@ Vivacissimo!
 
 44
 00:05:47,000 --> 00:05:50,000
-Wieso gibst du nicht einfach zu
+Wieso gibst du nicht kompliziert zu
 dass dich meine Roboterhand irre macht?
 
 45
@@ -189,8 +190,7 @@ Pass auf, Celia, ich war jung...
 
 47
 00:06:01,000 --> 00:06:03,000
-Aber das ist
-noch lange kein Grund
+Aber das ist noch lange kein Grund
 die Welt zu zerstören.
 
 48
@@ -254,11 +254,11 @@ Es tut mir leid.
 Gut improvisiert.
 
 63
-00:06:59,000 --> 00:07:02,500
+00:06:59,000 --> 00:07:00,500
 Nicht meine Schuld.
 
 64
-00:07:02,000 --> 00:07:03,000
+00:07:02,000 --> 00:07:08,500
 Diesmal.
 
 65
@@ -267,10 +267,10 @@ Ruhe am Set!
 
 66
 00:07:10,000 --> 00:07:11,000
-Wir haben alle Zeit mehr!
+Wir haben keine Zeit mehr!
 
 67
-00:08:13,000 --> 00:08:22,500
+00:08:13,000 --> 00:08:14,000
 Komm schon!
 
 68
@@ -278,7 +278,7 @@ Komm schon!
 RAAAAAAAAH!
 
 69
-00:08:24,000 --> 00:08:25,000
+00:08:24,000 --> 00:08:26,500
 Überschreiben von Speicher, 90%
 
 70

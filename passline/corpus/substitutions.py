@@ -28,6 +28,9 @@ SUBSTITUTIONS: dict[str, list[tuple[str, str]]] = {
         ("lose",      "win"),
         ("save",      "destroy"),
         ("protect",   "abandon"),
+        ("night",     "day"),
+        ("death",     "life"),
+        ("fault",     "merit"),
     ],
     "fr": [
         ("toujours",    "jamais"),
@@ -57,6 +60,10 @@ SUBSTITUTIONS: dict[str, list[tuple[str, str]]] = {
         ("faux",        "vrai"),
         ("ensemble",    "seul"),
         ("seul",        "ensemble"),
+        ("bas",         "haut"),
+        ("soir",        "matin"),
+        ("faute",       "mérite"),
+        ("super",       "nul"),
     ],
     "de": [
         ("immer",       "niemals"),
@@ -84,6 +91,11 @@ SUBSTITUTIONS: dict[str, list[tuple[str, str]]] = {
         ("neue",        "alte"),
         ("alte",        "neue"),
         ("zahlen",      "erhalten"),
+        ("unten",       "oben"),
+        ("Nacht",       "Tag"),
+        ("Schuld",      "Verdienst"),
+        ("Vollidiot",   "Genie"),
+        ("einfach",     "kompliziert"),
     ],
 }
 

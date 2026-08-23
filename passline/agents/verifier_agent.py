@@ -80,12 +80,14 @@ class VerifierAgent(BaseAgent):
         # Preserve language findings not superseded by a deterministic finding
         # on the same cue. Language rules use refs MT01–MT06.
         existing_all: list[dict] = ctx.session.state.get(STATE_ALL_FINDINGS, []) or []
-        det_cue_rules = {(d["cue_index"], d["rule"]) for d in det_dicts}
-        surviving_language = [
-            f for f in existing_all
-            if f.get("rule", "").startswith("MT")
-            and (f.get("cue_index"), f.get("rule")) not in det_cue_rules
-        ]
+        det_cue_rules = {(d.get("cue_index") or d.get("cue"), d["rule"]) for d in det_dicts}
+        surviving_language = []
+        for f in existing_all:
+            if f.get("type") == "language" or f.get("rule_ref", "").startswith("MT") or f.get("rule", "").startswith("MT"):
+                cue = f.get("cue_index") or f.get("cue")
+                rule = f.get("rule_ref") or f.get("rule")
+                if (cue, rule) not in det_cue_rules:
+                    surviving_language.append(f)
 
         combined = det_dicts + surviving_language
         verdict = "clean" if not combined else "violations_remain"

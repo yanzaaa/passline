@@ -46,6 +46,16 @@
       "detail": "Cue 12: duration=400ms < 1000ms"
     },
     {
+      "cue_index": 13,
+      "defect_type": "meaning_swap",
+      "rule": "meaning_changed",
+      "threshold": 0.0,
+      "measured_value": 0.0,
+      "severity": "WARNING",
+      "category": "MEANING_LEVEL",
+      "detail": "Cue 13: 'Nacht' → 'Tag'"
+    },
+    {
       "cue_index": 14,
       "defect_type": "short_duration",
       "rule": "sub_one_second",
@@ -67,53 +77,43 @@
     },
     {
       "cue_index": 20,
-      "defect_type": "meaning_swap",
-      "rule": "meaning_changed",
-      "threshold": 0.0,
-      "measured_value": 0.0,
-      "severity": "WARNING",
-      "category": "MEANING_LEVEL",
-      "detail": "Cue 20: 'Alle' → 'Keine'"
-    },
-    {
-      "cue_index": 47,
       "defect_type": "three_line_cue",
       "rule": "three_line_cue",
       "threshold": 2.0,
       "measured_value": 3.0,
       "severity": "WARNING",
       "category": "DETERMINISTIC",
-      "detail": "Cue 47: 3 lines (max is 2)"
+      "detail": "Cue 20: 3 lines (max is 2)"
     },
     {
-      "cue_index": 63,
-      "defect_type": "overlap",
-      "rule": "overlapping_cues",
-      "threshold": 0.0,
-      "measured_value": 500.0,
-      "severity": "ERROR",
-      "category": "DETERMINISTIC",
-      "detail": "Cue 63 end=422500ms overlaps cue 64 start=422000ms by 500ms"
-    },
-    {
-      "cue_index": 66,
+      "cue_index": 44,
       "defect_type": "meaning_swap",
       "rule": "meaning_changed",
       "threshold": 0.0,
       "measured_value": 0.0,
       "severity": "WARNING",
       "category": "MEANING_LEVEL",
-      "detail": "Cue 66: 'keine' → 'alle'"
+      "detail": "Cue 44: 'einfach' → 'kompliziert'"
     },
     {
-      "cue_index": 67,
+      "cue_index": 64,
       "defect_type": "overlap",
       "rule": "overlapping_cues",
       "threshold": 0.0,
       "measured_value": 500.0,
       "severity": "ERROR",
       "category": "DETERMINISTIC",
-      "detail": "Cue 67 end=502500ms overlaps cue 68 start=502000ms by 500ms"
+      "detail": "Cue 64 end=428500ms overlaps cue 65 start=428000ms by 500ms"
+    },
+    {
+      "cue_index": 69,
+      "defect_type": "overlap",
+      "rule": "overlapping_cues",
+      "threshold": 0.0,
+      "measured_value": 500.0,
+      "severity": "ERROR",
+      "category": "DETERMINISTIC",
+      "detail": "Cue 69 end=506500ms overlaps cue 70 start=506000ms by 500ms"
     },
     {
       "cue_index": 71,

@@ -98,7 +98,7 @@ C'est bien.
 
 24
 00:03:44,500 --> 00:03:45,700
-Rien d'inquiétant.
+Tout d'inquiétant.
 
 25
 00:03:46,000 --> 00:03:47,000
@@ -170,7 +170,7 @@ D'accord, ils arrivent. Deux minutes!
 
 42
 00:05:43,000 --> 00:05:44,000
-Moins vite, Thom!
+Plus vite, Thom!
 
 43
 00:05:45,000 --> 00:05:46,000

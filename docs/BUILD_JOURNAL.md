@@ -392,3 +392,51 @@ gcloud run deploy passline --source . --region us-central1 \
   --allow-unauthenticated \
   --set-env-vars GOOGLE_CLOUD_PROJECT=your-project-id
 ```
+
+---
+
+## Mission 07 — The Show
+
+**Date:** August 23, 2026
+
+### What was built
+
+| Deliverable | Description |
+|---|---|
+| Bounded Demo Corruption | `corrupt_demo` function in `corrupt.py` implementing adjacent-cue guards, layout bounds, and deterministic defects repairable in 3 passes |
+| Three Demo Excerpts | English, French, and German demo broken files generated deterministically and stored under `passline/corpus/demo/` alongside JSON manifests |
+| Hopeless-case Showcase | Over-corrupted French file copied as `hopeless-fr.srt` serving as an unfixable control showcasing honest failures |
+| Connected Break Button | Sever-side `POST /api/break/{id}` endpoint and client `triggerBreak()` re-corrupting repaired output with random seeds and re-firing pipeline |
+| Honest-fail Event Type | New `DELIVERY_FAILED = "delivery.failed"` (schema v1.3) emitting rule-breakdown details on remaining violations and preventing dead download links |
+| Style-guide Citations | `/api/style-guide/{rule_ref}/{lang}` endpoint serving per-language style guides with neutral section citations and expandable popovers |
+| Spoken Briefing System | `/api/briefing/{id}` endpoint concatenating Puck, Charon, and Kore speech configs using unified `google.genai` SDK |
+| Mode & Reset Polish | **LIVE** vs **REPLAY** tagging, slow-pulsing wait animations, and robust reset returning log, counters, clocks, and charts to blank state |
+
+### Non-obvious decisions recorded
+
+- **Patched ADK Coordinator in Tests**: Bypassed coordinator LLM in E2E tests by patching `build_coordinator` to return `pipeline` directly, ensuring E2E tests run fully hermetically in CI without network or Vertex API keys.
+- **Python-native WAV Merging**: Appended speech files by copying raw frames and parameters using the standard library `wave` module instead of bringing in external multimedia libraries.
+- **Deterministic Replay Detection**: Mode tags determined client-side by checking if `delivery_id` starts with `"DEMO-"`, avoiding complex server-side session tracking.
+
+### Result
+
+All tests passing — including the new `test_demo_repairability.py` and `test_mission07_evidence.py`.
+
+### Plan
+
+Authored before implementation: [`passline-mission07-plan.md`](../passline-mission07-plan.md)
+
+### Verification commands
+
+```bash
+source .venv/bin/activate
+
+# Run the full test suite (including the new Mission 07 tests)
+python -m pytest
+
+# Run only Mission 07 evidence tests
+python -m pytest tests/test_mission07_evidence.py -v
+
+# Run only demo repairability tests
+python -m pytest tests/test_demo_repairability.py -v
+```

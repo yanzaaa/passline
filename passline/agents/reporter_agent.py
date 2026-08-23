@@ -113,16 +113,24 @@ class ReporterAgent(BaseAgent):
                 details={
                     "repairs_applied": report["repairs_applied"],
                     "verdict": "passed",
+                    "repaired_file_exists": len(repaired_bytes) > 0,
                 },
             ))
         else:
+            per_rule_breakdown = {}
+            for f in all_findings:
+                rule_name = f.get("rule") or f.get("rule_ref") or "unknown"
+                per_rule_breakdown[rule_name] = per_rule_breakdown.get(rule_name, 0) + 1
+
             self.bus.emit(DeliveryEvent(
-                event_type=EventType.QC_VIOLATION,
+                event_type=EventType.DELIVERY_FAILED,
                 delivery_id=delivery_id,
                 language=language,
                 details={
                     "verdict": "failed",
                     "remaining_violations": remaining,
+                    "per_rule_breakdown": per_rule_breakdown,
+                    "repaired_file_exists": len(repaired_bytes) > 0,
                     "summary": f"{remaining} violation(s) remain after repair",
                 },
             ))

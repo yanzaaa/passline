@@ -43,21 +43,34 @@ bus = EventBus(_LOG_PATH)
 # Wire the bus into the approval queue singleton so it can emit events
 _approval_queue.set_bus(bus)
 
+from passline.dashboard.briefing import BriefingGenerator, BriefingError
+
 # In-memory store for repaired SRT bytes keyed by delivery_id.
 # Populated by PipelineRunner after each successful run.
 _repaired_store: dict[str, bytes] = {}
+
+# In-memory store for delivery reports and metadata needed by the briefing system.
+_delivery_metadata: dict[str, dict] = {}
+
+# Briefing cache and generator
+_briefing_cache: dict[str, bytes] = {}
+_briefing_generator = BriefingGenerator()
 
 # Demo corpus directory (bundled inside the package for Cloud Run)
 _DEMO_DIR = Path(__file__).parent.parent / "corpus" / "demo"
 
 # Language code → demo SRT filename mapping
 _DEMO_FILES: dict[str, str] = {
-    "en": "tos-en.srt",
-    "en-us": "tos-en.srt",
-    "fr": "tos-fr.srt",
-    "fr-fr": "tos-fr.srt",
-    "de": "tos-de.srt",
-    "de-de": "tos-de.srt",
+    "en": "demo-en-broken.srt",
+    "en-us": "demo-en-broken.srt",
+    "fr": "demo-fr-broken.srt",
+    "fr-fr": "demo-fr-broken.srt",
+    "de": "demo-de-broken.srt",
+    "de-de": "demo-de-broken.srt",
+    "demo-en": "demo-en-broken.srt",
+    "demo-fr": "demo-fr-broken.srt",
+    "demo-de": "demo-de-broken.srt",
+    "hopeless": "hopeless-fr.srt",
 }
 
 # ── FastAPI application ───────────────────────────────────────────────────────
@@ -174,6 +187,7 @@ async def upload(file: UploadFile, background_tasks: BackgroundTasks) -> JSONRes
         from passline.pipeline.runner import PipelineRunner
         runner = PipelineRunner(bus=bus, approval_queue=_approval_queue)
         report = await runner.run_delivery(srt_bytes, language, delivery_id=delivery_id)
+        _delivery_metadata[delivery_id] = report
         # Retrieve repaired bytes via the async-safe getter
         try:
             rb = await runner.get_repaired_bytes(delivery_id=delivery_id)
@@ -232,6 +246,98 @@ async def download_repaired(delivery_id: str) -> Response:
         media_type="application/octet-stream",
         headers={"Content-Disposition": f'attachment; filename="repaired-{delivery_id}.srt"'},
     )
+
+
+@app.post("/api/break/{delivery_id}")
+async def break_file(delivery_id: str, background_tasks: BackgroundTasks) -> JSONResponse:
+    """Take repaired SRT of cleared delivery, corrupt it server-side, and re-fire pipeline."""
+    repaired_bytes = _repaired_store.get(delivery_id)
+    if not repaired_bytes:
+        raise HTTPException(status_code=404, detail="No repaired file found for this delivery.")
+
+    parent_report = _delivery_metadata.get(delivery_id, {})
+    language = parent_report.get("language", "und")
+
+    import secrets
+    from passline.io.srt import parse_srt
+    from passline.corpus.corrupt import corrupt_demo
+
+    source = parse_srt(repaired_bytes, language=language)
+    seed = secrets.randbelow(10000)
+
+    result = corrupt_demo(
+        source,
+        seed=seed,
+        language=language,
+        excerpt_cues=14,
+        defects={"cps_blowout", "line_overflow", "short_duration"},
+    )
+
+    import uuid
+    child_id = str(uuid.uuid4())
+
+    async def _run_and_store_child() -> None:
+        from passline.pipeline.runner import PipelineRunner
+        runner = PipelineRunner(bus=bus, approval_queue=_approval_queue)
+        report = await runner.run_delivery(
+            result.broken_bytes,
+            language=language,
+            delivery_id=child_id,
+            parent_id=delivery_id,
+        )
+        _delivery_metadata[child_id] = report
+        try:
+            rb = await runner.get_repaired_bytes(delivery_id=child_id)
+            if rb:
+                _repaired_store[child_id] = rb
+                logger.info(
+                    "stored repaired bytes for broken child delivery %s (%d bytes)",
+                    child_id, len(rb),
+                )
+        except Exception as exc:
+            logger.warning("could not retrieve repaired_bytes for child %s: %s", child_id, exc)
+
+    background_tasks.add_task(_run_and_store_child)
+
+    return JSONResponse({
+        "status": "accepted",
+        "child_delivery_id": child_id,
+        "parent_delivery_id": delivery_id,
+    })
+
+
+@app.get("/api/briefing/{delivery_id}")
+async def briefing(delivery_id: str) -> Response:
+    """Serve concatenated spoken briefing WAV file for a delivery.
+
+    Generates lazily on first access and caches the result.
+    """
+    if delivery_id in _briefing_cache:
+        return Response(content=_briefing_cache[delivery_id], media_type="audio/wav")
+
+    report = _delivery_metadata.get(delivery_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="No metadata found for this delivery.")
+
+    language_findings = report.get("language_findings", [])
+
+    try:
+        audio_bytes = _briefing_generator.generate_briefing(report, language_findings)
+        _briefing_cache[delivery_id] = audio_bytes
+        return Response(content=audio_bytes, media_type="audio/wav")
+    except BriefingError as exc:
+        logger.warning("Briefing generation failed: %s", exc)
+        return JSONResponse({"error": "unavailable", "detail": str(exc)}, status_code=503)
+    except Exception as exc:
+        logger.error("Unexpected error in briefing generation: %s", exc)
+        return JSONResponse({"error": "unavailable", "detail": str(exc)}, status_code=503)
+
+
+@app.get("/api/style-guide/{rule_ref}/{lang}")
+async def style_guide(rule_ref: str, lang: str) -> JSONResponse:
+    """Return Style Guide citation for a language and rule code."""
+    from passline.agents.style_guide import get_citation
+    return JSONResponse(get_citation(rule_ref, lang))
 
 
 # ── Human approval queue API ──────────────────────────────────────────────────

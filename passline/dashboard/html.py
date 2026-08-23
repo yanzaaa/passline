@@ -489,7 +489,10 @@ input[type=file]{display:none}
 
   <!-- ── LEFT: Deliveries ──────────────────────────────────────── -->
   <section class="col" id="col-left">
-    <div class="col-header">Deliveries on the Board</div>
+    <div class="col-header" style="display:flex;justify-content:space-between;align-items:center;">
+      <span>Deliveries on the Board</span>
+      <span class="mode-indicator live" id="mode-indicator">LIVE</span>
+    </div>
 
     <!-- Drop zone -->
     <div class="dropzone" id="dropzone" title="Drop an SRT file or click to browse">
@@ -501,11 +504,12 @@ input[type=file]{display:none}
 
     <!-- Demo chips -->
     <div class="card" style="padding:10px 14px">
-      <div style="font-size:10px;color:var(--muted);font-weight:600;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">Demo Files</div>
+      <div style="font-size:10px;color:var(--muted);font-weight:600;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">English / French / German / Hopeless Case</div>
       <div class="demo-chips">
-        <div class="chip" onclick="triggerDemo('DEMO-EN-001','en-US')">EN-001</div>
-        <div class="chip" onclick="triggerDemo('DEMO-FR-002','fr-FR')">FR-002</div>
-        <div class="chip chip-hazard" onclick="triggerDemo('DEMO-JA-003','ja-JP')">JA-003</div>
+        <div class="chip" onclick="triggerDemo('demo-en','en-US')">English</div>
+        <div class="chip" onclick="triggerDemo('demo-fr','fr-FR')">French</div>
+        <div class="chip" onclick="triggerDemo('demo-de','de-DE')">German</div>
+        <div class="chip chip-hazard" style="border: 1px dashed var(--red); color: var(--red); background: rgba(220, 38, 38, 0.05);" onclick="triggerDemo('hopeless','fr-FR')">Hopeless Case</div>
       </div>
     </div>
 
@@ -524,7 +528,7 @@ input[type=file]{display:none}
     <div id="delivery-cards"></div>
 
     <div style="flex:1"></div>
-    <button class="break-btn" onclick="alert('BREAK THIS FILE — placeholder')">⚡ BREAK THIS FILE</button>
+    <button id="break-btn" class="break-btn" onclick="triggerBreak()" disabled title="No cleared delivery available to break">⚡ BREAK THIS FILE</button>
   </section>
 
   <!-- ── CENTER: Agent Stations ────────────────────────────────── -->
@@ -689,11 +693,30 @@ const HANDLERS = {
   'cue.analysis':       (ev) => { renderHeatStrip(ev.details.cues || []); addLog(ev, 'lifecycle'); },
   'approval.required':  (ev) => { showApproval(ev);              addLog(ev, 'approval'); },
   'delivery.passed':    (ev) => { markCleared(ev);               addLog(ev, 'lifecycle'); updateHolds(); },
+  'delivery.failed':    (ev) => { markFailed(ev);               addLog(ev, 'lifecycle'); updateHolds(); },
 };
+
+function updateModeIndicator(isReplay) {
+  const mode = document.getElementById('mode-indicator');
+  if (!mode) return;
+  if (isReplay) {
+    mode.className = 'mode-indicator replay';
+    mode.textContent = 'REPLAY';
+  } else {
+    mode.className = 'mode-indicator live';
+    mode.textContent = 'LIVE';
+  }
+}
 
 function dispatch(ev) {
   if (seen.has(ev.event_id)) return;  // deduplicate (backfill replay on reconnect)
   seen.add(ev.event_id);
+
+  if (ev.delivery_id) {
+    const isReplay = ev.delivery_id.startsWith('DEMO-');
+    updateModeIndicator(isReplay);
+  }
+
   const handler = HANDLERS[ev.event_type];
   if (handler) handler(ev);
 }
@@ -738,11 +761,23 @@ function addDeliveryCard(ev) {
   const el = document.createElement('div');
   el.className = 'delivery-card pending';
   el.id = `dc-${CSS.escape(ev.delivery_id)}`;
+  
+  let parentLabelHtml = '';
+  if (d.parent_id) {
+    parentLabelHtml = `<div class="dc-parent" style="font-size:10px;color:var(--amber);margin-bottom:4px;font-family:var(--mono);">parent: ${esc(d.parent_id)}</div>`;
+  }
+
+  let replayTagHtml = '';
+  if (ev.delivery_id.startsWith('DEMO-')) {
+    replayTagHtml = `<span class="mode-indicator replay" style="font-size:9px;padding:1px 5px;margin-left:6px;border-radius:10px;vertical-align:middle;">REPLAY</span>`;
+  }
+
   el.innerHTML = `
     <div class="dc-header">
-      <span class="dc-id">${esc(ev.delivery_id)}</span>
+      <span class="dc-id">${esc(ev.delivery_id)}${replayTagHtml}</span>
       <span class="status-badge badge-pending" id="badge-${CSS.escape(ev.delivery_id)}">SUBMITTED</span>
     </div>
+    ${parentLabelHtml}
     <div class="dc-meta dc-lang">${esc(ev.language)} · ${d.cue_count || '?'} cues</div>
     <div class="progress-bar"><div class="progress-fill" id="prog-${CSS.escape(ev.delivery_id)}"></div></div>
   `;
@@ -792,8 +827,8 @@ function markCleared(ev) {
   if (card)  { card.className  = 'delivery-card cleared'; }
   if (badge) { badge.className = 'status-badge badge-cleared'; badge.textContent = 'CLEARED FOR DELIVERY'; }
   if (prog)  { prog.style.width = '100%'; prog.style.background = 'var(--green)'; }
-  // Append a download link for the repaired SRT file
-  if (card) {
+  // Append a download link for the repaired SRT file if repaired_file_exists is true
+  if (card && ev.details && ev.details.repaired_file_exists === true) {
     const existing = card.querySelector('.download-link');
     if (!existing) {
       const link = document.createElement('a');
@@ -802,6 +837,125 @@ function markCleared(ev) {
       link.textContent = '⬇ Download repaired SRT';
       link.style.cssText = 'display:block;margin-top:6px;font-size:11px;color:var(--green);text-decoration:underline;';
       card.appendChild(link);
+    }
+  }
+  // Append Briefing button if enabled
+  if (card) {
+    const existingBriefing = card.querySelector('.briefing-btn');
+    if (!existingBriefing) {
+      const bbtn = document.createElement('button');
+      bbtn.className = 'briefing-btn';
+      bbtn.onclick = () => playBriefing(ev.delivery_id);
+      bbtn.textContent = '▶ Briefing';
+      bbtn.style.cssText = 'display:inline-block;margin-top:6px;margin-left:12px;font-size:10px;padding:2px 6px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#fff;cursor:pointer;border-radius:4px;';
+      card.appendChild(bbtn);
+    }
+  }
+  updateBreakButtonState();
+}
+
+function markFailed(ev) {
+  const s = deliveries[ev.delivery_id];
+  if (!s) return;
+  s.status = 'failed';
+  const card  = getCard(ev.delivery_id);
+  const badge = getBadge(ev.delivery_id);
+  const prog  = getProg(ev.delivery_id);
+  if (card)  { card.className  = 'delivery-card failed'; }
+  if (badge) {
+    badge.className = 'status-badge badge-failed';
+    const remains = ev.details.remaining_violations || s.violations || 0;
+    badge.textContent = `HELD — ${remains} violations remain`;
+  }
+  if (prog)  { prog.style.width = '100%'; prog.style.background = 'var(--amber)'; }
+
+  if (card) {
+    // Render per-rule breakdown
+    const breakdown = ev.details.per_rule_breakdown || {};
+    let bdHtml = '<div style="margin-top:6px;font-size:10px;color:var(--amber-dim);">';
+    bdHtml += '<strong>Violations Breakdown:</strong><ul style="margin:2px 0 0 10px;padding:0;list-style:disc;">';
+    Object.entries(breakdown).forEach(([rule, count]) => {
+      bdHtml += `<li>${esc(rule)}: ${count}</li>`;
+    });
+    bdHtml += '</ul></div>';
+    
+    const bdDiv = document.createElement('div');
+    bdDiv.innerHTML = bdHtml;
+    card.appendChild(bdDiv);
+
+    // Conditionally show best-effort download link
+    if (ev.details && ev.details.repaired_file_exists === true) {
+      const existing = card.querySelector('.download-link');
+      if (!existing) {
+        const link = document.createElement('a');
+        link.className = 'download-link failed-download';
+        link.href = `/api/download/${encodeURIComponent(ev.delivery_id)}`;
+        link.textContent = '⬇ Download best-effort (not cleared)';
+        link.style.cssText = 'display:block;margin-top:6px;font-size:11px;color:var(--amber);text-decoration:underline;';
+        card.appendChild(link);
+      }
+    }
+
+    // Append Briefing button if enabled
+    const existingBriefing = card.querySelector('.briefing-btn');
+    if (!existingBriefing) {
+      const bbtn = document.createElement('button');
+      bbtn.className = 'briefing-btn';
+      bbtn.onclick = () => playBriefing(ev.delivery_id);
+      bbtn.textContent = '▶ Briefing';
+      bbtn.style.cssText = 'display:inline-block;margin-top:6px;margin-left:12px;font-size:10px;padding:2px 6px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#fff;cursor:pointer;border-radius:4px;';
+      card.appendChild(bbtn);
+    }
+  }
+  updateBreakButtonState();
+}
+
+function updateBreakButtonState() {
+  const btn = document.getElementById('break-btn');
+  if (!btn) return;
+  const clearedCards = document.querySelectorAll('.delivery-card.cleared');
+  if (clearedCards.length > 0) {
+    btn.disabled = false;
+    btn.title = 'Break the most recently cleared delivery';
+  } else {
+    btn.disabled = true;
+    btn.title = 'No cleared delivery available to break';
+  }
+}
+
+async function playBriefing(deliveryId) {
+  const card = getCard(deliveryId);
+  if (!card) return;
+  const bbtn = card.querySelector('.briefing-btn');
+  if (bbtn) {
+    bbtn.disabled = true;
+    bbtn.textContent = '⏳ Loading...';
+  }
+  try {
+    const resp = await fetch(`/api/briefing/${encodeURIComponent(deliveryId)}`);
+    if (!resp.ok) {
+      if (bbtn) {
+        bbtn.textContent = 'Briefing unavailable';
+        bbtn.disabled = true;
+      }
+      return;
+    }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    if (bbtn) {
+      bbtn.disabled = false;
+      bbtn.textContent = '⏸ Playing';
+    }
+    audio.onended = () => {
+      if (bbtn) bbtn.textContent = '▶ Briefing';
+    };
+    await audio.play();
+  } catch (e) {
+    console.warn('playBriefing failed', e);
+    if (bbtn) {
+      bbtn.textContent = 'Briefing unavailable';
+      bbtn.disabled = true;
     }
   }
 }
@@ -879,6 +1033,7 @@ const LOG_TYPES = {
   'cue.analysis':       ['lifecycle', 'ANALYSIS  '],
   'approval.required':  ['approval',  'APPROVAL  '],
   'delivery.passed':    ['lifecycle', 'CLEARED   '],
+  'delivery.failed':    ['lifecycle', 'HELD      '],
 };
 
 function addLog(ev, cls) {
@@ -889,12 +1044,42 @@ function addLog(ev, cls) {
 
   const el = document.createElement('div');
   el.className = `log-entry ${cls}`;
-  el.innerHTML = `<span class="log-ts">${esc(ts)}</span><span class="log-type">${esc(typeLabel)}</span>${esc(detail)}`;
+
+  let chipHtml = '';
+  let popoverHtml = '';
+  if (ev.event_type === 'qc.violation' && ev.details && ev.details.rule_ref && ev.details.rule_ref.startsWith('MT')) {
+    const confidence_pct = Math.round((ev.details.confidence || 0) * 100);
+    const id = `pop-${ev.event_id || Math.random().toString(36).substr(2, 9)}`;
+    chipHtml = ` <span class="conf-chip" onclick="togglePopover('${id}', '${ev.details.rule_ref}', '${ev.language}')">${ev.details.rule_ref} · ${confidence_pct}%</span>`;
+    popoverHtml = `<div id="${id}" class="flag-popover" style="display:none;" data-explanation="${esc(ev.details.explanation || ev.details.detail || '')}"></div>`;
+  }
+
+  el.innerHTML = `<span class="log-ts">${esc(ts)}</span><span class="log-type">${esc(typeLabel)}</span>${esc(detail)}${chipHtml}${popoverHtml}`;
   feed.appendChild(el);
   feed.scrollTop = feed.scrollHeight;
 
   // Keep log at ≤500 lines
   while (feed.children.length > 500) feed.removeChild(feed.firstChild);
+}
+
+async function togglePopover(popoverId, ruleRef, lang) {
+  const el = document.getElementById(popoverId);
+  if (!el) return;
+  if (el.style.display === 'block') {
+    el.style.display = 'none';
+    return;
+  }
+  const explanation = el.getAttribute('data-explanation') || '';
+  try {
+    const r = await fetch(`/api/style-guide/${encodeURIComponent(ruleRef)}/${encodeURIComponent(lang)}`);
+    if (r.ok) {
+      const data = await r.json();
+      el.innerHTML = `<strong>${esc(data.rule_ref)}: ${esc(data.rule_name)}</strong><br>Style Guide: ${esc(data.citation)}<br>Reason: ${esc(explanation)}`;
+      el.style.display = 'block';
+    }
+  } catch (e) {
+    console.warn('Failed to fetch style-guide citation', e);
+  }
 }
 
 function buildLogDetail(ev) {
@@ -908,6 +1093,7 @@ function buildLogDetail(ev) {
     case 'cue.analysis':       return `${(d.cues||[]).length} cues analysed`;
     case 'approval.required':  return `${d.reason || 'review required'}`;
     case 'delivery.passed':    return `${ev.delivery_id}  CLEARED  ${d.note || ''}`;
+    case 'delivery.failed':    return `${ev.delivery_id}  HELD — ${d.remaining_violations || '?'} violation(s) remain`;
     default:                   return `${ev.delivery_id}`;
   }
 }
@@ -929,6 +1115,14 @@ function showApproval(ev) {
   const d = ev.details || {};
   sub.textContent = d.reason || 'Human review required before delivery.';
   window._currentApprovalId = d.item_id || null;
+
+  if (ev.delivery_id) {
+    const dc = getCard(ev.delivery_id);
+    if (dc) {
+      dc.classList.add('waiting');
+    }
+    window._currentApprovalDeliveryId = ev.delivery_id;
+  }
 }
 
 function handleApproval(action) {
@@ -939,6 +1133,15 @@ function handleApproval(action) {
     ? '✓ Approved — delivery authorized.'
     : '✗ Rejected — delivery blocked.';
   const itemId = window._currentApprovalId;
+
+  if (window._currentApprovalDeliveryId) {
+    const dc = getCard(window._currentApprovalDeliveryId);
+    if (dc) {
+      dc.classList.remove('waiting');
+    }
+    window._currentApprovalDeliveryId = null;
+  }
+
   if (itemId) {
     fetch('/api/queue/' + itemId + '/' + action, {method:'POST'})
       .catch(err => console.warn('approval API call failed', err));
@@ -958,11 +1161,67 @@ async function stopReplay() {
 
 async function startReset() {
   await fetch('/api/reset', {method:'POST'});
-  // Clear in-memory dedup set and delivery cards so the board looks fresh
+  
+  // 1. Clear in-memory deduplication set and deliveries tracking dict
   seen.clear();
+  for (const k in deliveries) {
+    delete deliveries[k];
+  }
+  
+  // 2. Cards and logs
   document.getElementById('delivery-cards').innerHTML = '';
-  document.getElementById('log-list').innerHTML = '';
-  document.getElementById('holds-count').textContent = '0';
+  const logFeed = document.getElementById('log-feed');
+  if (logFeed) logFeed.innerHTML = '';
+  
+  // 3. Holds count and pill
+  holdsCount = 0;
+  updateHolds();
+  
+  // 4. Station job counters and lamps
+  for (const k in stationCounters) {
+    stationCounters[k] = 0;
+    const cnt = document.getElementById(`cnt-${k}`);
+    if (cnt) cnt.textContent = '0';
+  }
+  document.querySelectorAll('.lamp').forEach(l => {
+    l.className = 'lamp lamp-ready';
+  });
+  document.querySelectorAll('.station-tile').forEach(t => {
+    t.className = 'station-tile';
+  });
+  
+  // 5. Reading speed chart
+  const strip = document.getElementById('heat-strip');
+  if (strip) {
+    strip.innerHTML = '<span style="color:var(--dim);font-size:11px;align-self:center;padding:4px 0">Awaiting cue analysis…</span>';
+  }
+  const countEl = document.getElementById('heat-cue-count');
+  if (countEl) countEl.textContent = '—';
+  
+  // 6. Before/after diff panel
+  const db = document.getElementById('diff-before');
+  const da = document.getElementById('diff-after');
+  if (db) db.textContent = '—';
+  if (da) da.textContent = '—';
+  
+  // 7. Approval card
+  const acard = document.getElementById('approval-card');
+  if (acard) acard.classList.remove('active');
+  const asub = document.getElementById('approval-sub');
+  if (asub) asub.textContent = 'Waiting for approval request…';
+  window._currentApprovalId = null;
+  window._currentApprovalDeliveryId = null;
+  
+  // 8. Drop zone caption
+  const dzLabel = document.querySelector('.dropzone-label');
+  if (dzLabel) dzLabel.textContent = 'Drop subtitle file here';
+  
+  // 9. Delivery window countdown
+  countdownS = 14400;
+  
+  // 10. Mode indicator and break button state
+  updateModeIndicator(false);
+  updateBreakButtonState();
 }
 
 function toggleLoop() {
@@ -975,7 +1234,7 @@ async function triggerDemo(id, lang) {
   // Fetch the bundled demo corpus file and POST it to /api/upload so the
   // real pipeline runs — no demo replay, no startReplay() call.
   try {
-    const srtResp = await fetch(`/api/demo/${encodeURIComponent(lang)}`);
+    const srtResp = await fetch(`/api/demo/${encodeURIComponent(id)}`);
     if (!srtResp.ok) { console.warn('demo fetch failed', srtResp.status); return; }
     const blob = await srtResp.blob();
     const filename = `tos-${lang.split('-')[0].toLowerCase()}-broken.srt`;
@@ -991,6 +1250,30 @@ async function triggerDemo(id, lang) {
       console.log('demo pipeline started', data);
     }
   } catch (e) { console.warn('triggerDemo error', e); }
+}
+
+async function triggerBreak() {
+  const clearedCards = document.querySelectorAll('.delivery-card.cleared');
+  if (clearedCards.length === 0) return;
+  const card = clearedCards[0];
+  const deliveryId = card.id.replace('dc-', '');
+
+  const btn = document.getElementById('break-btn');
+  if (btn) btn.disabled = true;
+
+  try {
+    const resp = await fetch(`/api/break/${encodeURIComponent(deliveryId)}`, {method: 'POST'});
+    if (!resp.ok) {
+      console.warn('break action failed', resp.status);
+    } else {
+      const data = await resp.json();
+      console.log('break pipeline started', data);
+    }
+  } catch (e) {
+    console.warn('triggerBreak error', e);
+  } finally {
+    updateBreakButtonState();
+  }
 }
 
 // ── File drop zone ────────────────────────────────────────────────────
