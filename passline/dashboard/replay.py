@@ -1,7 +1,7 @@
 """Demo replay engine for Passline Mission Control.
 
-Reads tests/fixtures/demo_events.jsonl and re-emits every event through the
-live EventBus with a fresh timestamp, preserving all other fields.  Pacing
+Reads passline/corpus/demo/demo_events.jsonl and re-emits every event through
+the live EventBus with a fresh timestamp, preserving all other fields.  Pacing
 is driven by the ``replay_offset_s`` field in each event's ``details``.
 
 Each replay run uses a fresh delivery_id so repeated runs produce distinct
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_FIXTURE = Path(__file__).parent.parent.parent / "tests" / "fixtures" / "demo_events.jsonl"
+_FIXTURE = Path(__file__).parent.parent / "corpus" / "demo" / "demo_events.jsonl"
 
 # Module-level task handle — one replay at a time
 _task: asyncio.Task | None = None

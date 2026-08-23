@@ -30,6 +30,9 @@ passline-dashboard = "passline.dashboard.app:run"
 where = ["."]
 include = ["passline*"]
 
+[tool.setuptools.package-data]
+"passline.corpus" = ["demo/*.srt", "demo/*.jsonl"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
