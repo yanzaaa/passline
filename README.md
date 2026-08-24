@@ -4,6 +4,10 @@
 
 **Multi-agent subtitle quality control and repair system for streaming delivery workflows**
 
+**🌟 LIVE DEMO: [https://passline-x24264ca3q-ue.a.run.app](https://passline-x24264ca3q-ue.a.run.app)** — Click the "English" chip under Demo controls to watch the live pipeline catch and repair defects!
+
+**Compliance Statement:** The only AI dependencies are the two Google libraries (`google-adk` and `google-genai`), both called at runtime, and the project was built using IBM Bob.
+
 Built on [Google's Agent Development Kit](https://google.github.io/adk-docs/) with
 Gemini on Vertex AI.
 
@@ -26,8 +30,7 @@ repairs at the language level.
 ## Built with IBM Bob — Agentic Cinema Hackathon (IBM Track)
 
 Passline is an entry in the **Agentic Cinema hackathon**, IBM track.
-Every line of source code, tests, and configuration is planned and written by
-**IBM Bob** inside this repository.
+IBM Bob drove the build, authored the plan document for every mission before implementation, implemented the missions in Agent mode, and wrote the two-job continuous integration pipeline, while routine iteration and cosmetic passes were carried by other tooling.
 
 - 📓 [Build Journal](docs/BUILD_JOURNAL.md) — mission-by-mission log of what was built
 - 📐 [Foundation Plan](passline-foundation-plan.md) — the Mission 01 architecture plan
@@ -36,7 +39,7 @@ Every line of source code, tests, and configuration is planned and written by
 
 ## Quickstart
 
-**Requirements:** Python 3.12
+**Requirements:** Python 3.12 or 3.13 for local development and continuous integration. The deployed container on Cloud Run explicitly runs Python 3.13.
 
 ```bash
 # 1 — Clone and enter the repo
@@ -92,7 +95,7 @@ The dashboard supports:
 # Build and deploy (uses Google Cloud Buildpacks — no Dockerfile needed)
 gcloud run deploy passline \
   --source . \
-  --region us-central1 \
+  --region us-east1 \
   --allow-unauthenticated \
   --set-env-vars GOOGLE_CLOUD_PROJECT=your-project-id
 ```
@@ -140,7 +143,7 @@ docs/
 | Variable | Default | Description |
 |---|---|---|
 | `GOOGLE_CLOUD_PROJECT` | — | GCP project ID (for Vertex AI) |
-| `GOOGLE_CLOUD_LOCATION` | `us-central1` | Vertex AI region |
+| `GOOGLE_CLOUD_LOCATION` | `us-east1` | Vertex AI region |
 | `GOOGLE_API_KEY` | — | Gemini API key (alternative to Vertex AI) |
 | `PASSLINE_LANG_MODEL` | `gemini-3.1-pro-preview` | Model for language checker |
 | `PASSLINE_FIXER_MODEL` | `gemini-3-flash-preview` | Model for fixer agent |
@@ -178,6 +181,15 @@ python -m pytest tests/test_grading.py -v --live-llm
 ```
 
 ---
+
+## Acknowledgments & Licenses
+
+### Style Guide
+The style guide citation table ships with the project as a neutral illustrative house guide with no affiliation to any distributor's specification. A real deployment would swap in its own proprietary style guide definitions.
+
+### Tears of Steel (Corpus Assets)
+© Blender Foundation | [mango.blender.org](https://mango.blender.org)
+The subtitle assets used for demonstration and testing are licensed under [Creative Commons Attribution 3.0 (CC-BY 3.0)](https://creativecommons.org/licenses/by/3.0/).
 
 ## License
 

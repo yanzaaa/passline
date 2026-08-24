@@ -1,7 +1,6 @@
 # Build Journal — Built with IBM Bob
 
-Every line of Passline source code, tests, and configuration is planned and written
-by **IBM Bob** inside this repository. No human authored any source file.
+Passline is an entry in the Agentic Cinema hackathon. IBM Bob drove the build, authored the plan document for every mission before implementation, implemented the missions in Agent mode, and wrote the two-job continuous integration pipeline, while routine iteration and cosmetic passes were carried by other tooling.
 The only AI dependencies in the codebase are **google-adk** and **google-genai**
 (Google's Agent Development Kit and Gemini client) — no other AI provider is used
 anywhere in the dependency tree.
@@ -395,7 +394,7 @@ gcloud run deploy passline --source . --region us-central1 \
 
 ---
 
-## Mission 07 — The Show
+## Mission 08 — The Show
 
 **Date:** August 23, 2026
 
@@ -420,22 +419,22 @@ gcloud run deploy passline --source . --region us-central1 \
 
 ### Result
 
-All tests passing — including the new `test_demo_repairability.py` and `test_mission07_evidence.py`.
+**234 tests passing, 3 skipped** (live LLM tests behind `--live-llm`) — `python -m pytest`
 
 ### Plan
 
-Authored before implementation: [`passline-mission07-plan.md`](../passline-mission07-plan.md)
+Authored before implementation: [`passline-mission08-plan.md`](../passline-mission08-plan.md)
 
 ### Verification commands
 
 ```bash
 source .venv/bin/activate
 
-# Run the full test suite (including the new Mission 07 tests)
+# Run the full test suite (including the new Mission 08 tests)
 python -m pytest
 
-# Run only Mission 07 evidence tests
-python -m pytest tests/test_mission07_evidence.py -v
+# Run only Mission 08 evidence tests
+python -m pytest tests/test_mission08_evidence.py -v
 
 # Run only demo repairability tests
 python -m pytest tests/test_demo_repairability.py -v

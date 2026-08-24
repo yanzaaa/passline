@@ -11,11 +11,11 @@
 - **`asyncio.coroutine` is gone in Python 3.12** — if a new ADK/dependency uses it, patch before importing.
 - **`pip install -e ".[dev]"`** installs the package + pytest. The `[dev]` extra is in `pyproject.toml`.
 - Run a single test: `python -m pytest tests/test_pipeline.py::TestApprovalQueue::test_approve_resolves_item`
-- **Google ADK only**: `google-adk` and `google-genai` are the only permitted AI libraries. No OpenAI, Anthropic, or other providers.
+- **Google AI Only**: `google-adk` and `google-genai` are the only permitted AI libraries. No other AI provider may be added.
 - **`install_retry_on_model(agent)`** must use `object.__setattr__(model, ...)` — the Gemini class is Pydantic and rejects direct assignment. Call AFTER agent construction.
 - **`LoopAgent` exits via `event.actions.escalate = True`** — NOT a callback. The verifier yields `Event(actions=EventActions(escalate=True))`.
 - **`output_schema` + tools coexist in ADK 2.7.1**: No mutual exclusion, despite what older docs say.
-- **`ParallelAgent`, `LoopAgent`, `SequentialAgent` are deprecated** in ADK 2.7.1 but still work. The deprecation warnings are expected and harmless.
+- **Classic workflow agents** (`SequentialAgent`, `ParallelAgent`, `LoopAgent`) are used intentionally because they express the exact sequential, parallel, and loop structure this pipeline needs. The deprecation warnings are expected and harmless on the pinned version, while the newer graph workflow interface is the forward path.
 - **`BaseAgent._run_async_impl`** must yield at least one `Event` to commit state. Use `Event(author=self.name, actions=EventActions(state_delta={...}))`.
 - **Session state writes go through event delta**: `EventActions(state_delta={"key": val})` on the yielded event — NOT `ctx.state["key"] = val` directly (that pattern is for tool callbacks inside LlmAgents).
 - **`ApprovalQueue.await_decision(item_id)`** is a real async gate — the loop suspends until the FastAPI route fires `queue.approve/reject`. Do NOT call from synchronous code.

@@ -16,5 +16,12 @@ dist/
 .mypy_cache/
 .ruff_cache/
 
+# Agent & Assistant state directories
+.gemini/
+.agents/
+.cursor/
+.aider/
+tool-outputs/
+
 # Runtime output
 passline_events.jsonl

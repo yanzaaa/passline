@@ -17,6 +17,10 @@ dependencies = [
     "python-multipart>=0.0.9,<1",
 ]
 
+[project.urls]
+Homepage = "https://github.com/yanzaaa/passline"
+"Live Demo" = "https://passline-x24264ca3q-ue.a.run.app"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=9,<10",
@@ -31,7 +35,7 @@ where = ["."]
 include = ["passline*"]
 
 [tool.setuptools.package-data]
-"passline.corpus" = ["demo/*.srt", "demo/*.jsonl"]
+"passline.corpus" = ["demo/*.srt", "demo/*.json", "demo/*.jsonl"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -52,7 +52,7 @@ passline-dashboard
 | **Agents** | `passline/agents/` | Full ADK pipeline (Mission 06) |
 | **Pipeline** | `passline/pipeline/` | `ApprovalQueue`, `PipelineRunner` |
 
-## ADK Agent Graph (Mission 07)
+## ADK Agent Graph (Mission 08)
 
 ```
 RootCoordinator (LlmAgent, gemini-3-flash-preview)
@@ -104,7 +104,7 @@ RootCoordinator (LlmAgent, gemini-3-flash-preview)
 
 ## Testing
 
-- **214 tests passing, 3 skipped**: `python -m pytest`
+- **234 tests passing, 3 skipped**: `python -m pytest`
 - `--live-llm` flag enables tests that make real LLM API calls
 - Pipeline tests in `tests/test_pipeline.py` — fully offline, no LLM calls
 - Dashboard tests in `tests/test_dashboard.py` — async ASGI via `httpx.ASGITransport`

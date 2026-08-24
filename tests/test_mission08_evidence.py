@@ -65,7 +65,7 @@ async def client(fresh_app):
 # Evidence Tests
 # ─────────────────────────────────────────────────────────────────────────────
 
-class TestMission07Evidence:
+class TestMission08Evidence:
     @pytest.mark.anyio
     async def test_break_action_creates_linked_delivery(self, fresh_app, client) -> None:
         """The /api/break/{id} endpoint fetches repaired bytes, corrupts them, and re-fires pipeline."""
