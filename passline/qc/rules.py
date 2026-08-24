@@ -76,7 +76,7 @@ def check_file(
     delivery_id:
         Identifier attached to emitted events.
     language:
-        Language code attached to emitted events.
+        Language code attached to emitted events. Used as a fallback if the file has no language.
     bus:
         Optional :class:`~passline.events.bus.EventBus`; when provided, one
         ``qc.violation`` event is emitted per finding.
@@ -84,7 +84,8 @@ def check_file(
     findings: list[Finding] = []
     cues = subtitle_file.cues
     
-    is_cjk = language.lower() in ("zh", "ja", "ko", "zh-tw", "zh-cn", "zh-hk", "zh-hant", "zh-hans")
+    resolved_language = language if language != "und" else (subtitle_file.language if subtitle_file.language else "und")
+    is_cjk = resolved_language.lower() in ("zh", "ja", "ko", "zh-tw", "zh-cn", "zh-hk", "zh-hant", "zh-hans")
 
     limit_cps_violation = CPS_VIOLATION_CJK if is_cjk else CPS_VIOLATION
     limit_cps_warning = CPS_WARNING_LOW_CJK if is_cjk else CPS_WARNING_LOW
@@ -207,7 +208,7 @@ def check_file(
             bus.emit(DeliveryEvent(
                 event_type=EventType.QC_VIOLATION,
                 delivery_id=delivery_id,
-                language=language,
+                language=resolved_language,
                 details={
                     "rule":        finding.rule,
                     "cue":         finding.cue_index,

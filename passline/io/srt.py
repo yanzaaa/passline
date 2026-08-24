@@ -197,7 +197,7 @@ def parse_srt(
     dialect = SrtDialect(has_bom=has_bom, crlf=crlf, trailing_blank=trailing_blank)
 
     # ── 6. Parse each cue block ───────────────────────────────────────────────
-    cues: list[SubtitleCue] = []
+    raw_cues: list[tuple[int | None, int, int, list[str], str]] = []
     for block in blocks:
         block_lines = block.split("\n")
 
@@ -212,10 +212,9 @@ def parse_srt(
         try:
             start_ms, end_ms = _parse_timecode_line(block_lines[0])
             # It's a timecode line! The index was omitted.
-            index = len(cues) + 1
+            index = None
             tc_line = block_lines[0]
             text_lines = block_lines[1:]
-            anomalies.append(f"Cue {index}: missing index number — auto-assigned")
         except ValueError:
             # Normal case: first line is index
             try:
@@ -246,18 +245,34 @@ def parse_srt(
             
         # Check for non-canonical timecode format
         if not _CANONICAL_TC_RE.match(tc_line):
+            display_index = index if index is not None else "(auto)"
             anomalies.append(
-                f"Cue {index}: non-canonical timecode {tc_line!r} — "
+                f"Cue {display_index}: non-canonical timecode {tc_line!r} — "
                 f"normalised to {_ms_to_timecode(start_ms)} --> {_ms_to_timecode(end_ms)}"
             )
 
+        text_lines = [line for line in text_lines if line.strip()]
+
         if not text_lines:
-            anomalies.append(f"Skipped cue {index}: no text lines")
+            display_index = index if index is not None else "(auto)"
+            anomalies.append(f"Skipped cue {display_index}: no text lines")
             skipped += 1
             continue
 
+        raw_cues.append((index, start_ms, end_ms, text_lines, tc_line))
+
+    # Resolve missing indices
+    used_indices = {idx for idx, _, _, _, _ in raw_cues if idx is not None}
+    next_auto_index = max(used_indices) + 1 if used_indices else 1
+    
+    cues: list[SubtitleCue] = []
+    for idx, start_ms, end_ms, text_lines, tc_line in raw_cues:
+        if idx is None:
+            idx = next_auto_index
+            next_auto_index += 1
+            anomalies.append(f"Cue {idx}: missing index number — auto-assigned")
         cues.append(SubtitleCue(
-            index=index,
+            index=idx,
             start_ms=start_ms,
             end_ms=end_ms,
             lines=text_lines,

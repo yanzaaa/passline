@@ -109,8 +109,10 @@ def _split_long_line(line: str, max_chars: int = LINE_CHAR_MAX, is_cjk: bool = F
         split_at = line.rfind(" ", 0, max_chars + 1)
         if split_at == -1:
             # No space — hard split
-            return [line[:max_chars], line[max_chars:]]
-        return [line[:split_at], line[split_at + 1:]]
+            part1, part2 = line[:max_chars], line[max_chars:]
+        else:
+            part1, part2 = line[:split_at], line[split_at + 1:]
+        return [part1] + _split_long_line(part2, max_chars, is_cjk)
     else:
         # CJK splitting based on display width and punctuation.
         from passline.models.subtitle import _strip_markup
@@ -143,11 +145,16 @@ def _split_long_line(line: str, max_chars: int = LINE_CHAR_MAX, is_cjk: bool = F
                 break
                 
         if found_idx == -1:
-            # No punctuation to break on. Do not mangle CJK text.
-            return [line]
-            
-        # We break AFTER the punctuation.
-        break_point = found_idx + 1
+            # Fallback 1: Is there a space?
+            space_idx = visible.rfind(" ", 0, split_idx + 1)
+            if space_idx != -1:
+                break_point = space_idx + 1
+            else:
+                # Fallback 2: Hard split at split_idx
+                break_point = split_idx + 1
+        else:
+            # We break AFTER the punctuation.
+            break_point = found_idx + 1
         
         # Now map the break_point (in visible text) back to the original line with markup
         # This is a bit tricky, but for CJK we often don't have markup mid-sentence, 
@@ -158,7 +165,7 @@ def _split_long_line(line: str, max_chars: int = LINE_CHAR_MAX, is_cjk: bool = F
         in_tag = False
         final_raw_split = -1
         
-        if break_point == len(visible):
+        if break_point >= len(visible):
              return [line]
              
         for i, char in enumerate(line):
@@ -176,7 +183,13 @@ def _split_long_line(line: str, max_chars: int = LINE_CHAR_MAX, is_cjk: bool = F
         if final_raw_split == -1:
             return [line]
             
-        return [line[:final_raw_split].strip(), line[final_raw_split:].strip()]
+        part1 = line[:final_raw_split].strip()
+        part2 = line[final_raw_split:].strip()
+        
+        if not part2:
+            return [part1]
+            
+        return [part1] + _split_long_line(part2, max_chars, is_cjk)
 
 
 def _apply_deterministic_fix(
@@ -213,24 +226,12 @@ def _apply_deterministic_fix(
 
     elif rule == "three_line_cue":
         if len(cue.lines) > 2:
-            # Join last two lines if combined visible length <= limit_line_char
-            from passline.models.subtitle import _strip_markup
-            import unicodedata
-            combined = cue.lines[-2].rstrip() + " " + cue.lines[-1].lstrip()
-            
-            combined_vis = _strip_markup(combined).rstrip()
-            width = 0
-            if is_cjk:
-                for char in combined_vis:
-                    w = unicodedata.east_asian_width(char)
-                    width += 2 if w in ("W", "F") else 1
-            else:
-                width = len(combined_vis)
-                
-            if width <= limit_line_char:
-                new_lines = list(cue.lines[:-2]) + [combined]
+            # Full reflow: join all lines and re-split to try to fit into 2 lines
+            full_text = " ".join(line.strip() for line in cue.lines)
+            new_lines = _split_long_line(full_text, max_chars=limit_line_char, is_cjk=is_cjk)
+            if len(new_lines) <= 2:
                 cue_list[idx] = cue.model_copy(update={"lines": new_lines})
-            # else: do not discard the third line; leave unchanged as unfixable.
+            # else: do not discard lines; leave unchanged as unfixable.
 
     elif rule in ("cps_exceeded", "cps_warning"):
         # Extend end_ms so CPS drops to just below CPS_WARNING_LOW (clean state)

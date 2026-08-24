@@ -41,10 +41,14 @@ from passline.models.subtitle import SrtDialect, SubtitleCue, SubtitleFile
 from passline.io.srt import parse_srt, write_srt
 from passline.corpus.substitutions import get_substitutions
 from passline.qc.thresholds import (
-    CPS_VIOLATION as CPS_THRESHOLD,
-    LINE_CHAR_MAX as LINE_CHAR_THRESHOLD,
+    CPS_VIOLATION,
+    CPS_VIOLATION_CJK,
+    LINE_CHAR_MAX,
+    LINE_CHAR_MAX_CJK,
     MIN_DURATION_MS,
 )
+CPS_THRESHOLD = CPS_VIOLATION
+LINE_CHAR_THRESHOLD = LINE_CHAR_MAX
 ALL_DEFECT_TYPES: frozenset[str] = frozenset({
     "cps_blowout",
     "line_overflow",
@@ -156,20 +160,23 @@ def _substitute_text(
 
 # ── Per-defect applicators ────────────────────────────────────────────────────
 
-def _apply_cps_blowout(cue: SubtitleCue) -> SubtitleCue | None:
-    """Shrink display time so CPS > CPS_THRESHOLD.
+def _apply_cps_blowout(cue: SubtitleCue, cps_threshold: float, is_cjk: bool) -> SubtitleCue | None:
+    """Shrink display time so CPS > cps_threshold.
 
     Returns None if the cue is ineligible (already over threshold or too short).
     """
-    if cue.cps >= CPS_THRESHOLD:
+    cue_cps = cue.cps_display if is_cjk else cue.cps
+    if cue_cps >= cps_threshold:
         return None  # already violating — skip (keeps manifest unambiguous)
-    if cue.total_chars < 10:
+    
+    total_chars = cue.total_display_chars if is_cjk else cue.total_chars
+    if total_chars < 10:
         return None  # too few chars to produce a meaningful CPS blowout
     if cue.duration_ms < 500:
         return None  # already very short
 
-    # New duration: total_chars / 22 * 1000 ms (22 > threshold 20 → CPS > 20)
-    new_duration_ms = int(cue.total_chars / 22.0 * 1000)
+    # New duration: total_chars / (cps_threshold + 2.0) * 1000 ms -> CPS > cps_threshold
+    new_duration_ms = int(total_chars / (cps_threshold + 2.0) * 1000)
     # Guard: must actually exceed threshold
     if new_duration_ms <= 0:
         return None
@@ -180,29 +187,31 @@ def _apply_cps_blowout(cue: SubtitleCue) -> SubtitleCue | None:
         end_ms=new_end_ms,
         lines=cue.lines,
     )
-    if mutated.cps <= CPS_THRESHOLD:
+    mutated_cps = mutated.cps_display if is_cjk else mutated.cps
+    if mutated_cps <= cps_threshold:
         return None  # rounding didn't push it over — skip
     return mutated
 
 
-def _apply_line_overflow(cue: SubtitleCue) -> SubtitleCue | None:
-    """Join lines into one line longer than LINE_CHAR_THRESHOLD chars.
+def _apply_line_overflow(cue: SubtitleCue, line_char_threshold: int, is_cjk: bool) -> SubtitleCue | None:
+    """Join lines into one line longer than line_char_threshold chars.
 
     Only eligible if the joined result exceeds the threshold.
     """
-    if cue.total_chars > 80:
+    total_chars = cue.total_display_chars if is_cjk else cue.total_chars
+    if total_chars > 80:
         return None
     if len(cue.lines) < 2:
         return None
-    if any(c > LINE_CHAR_THRESHOLD for c in cue.char_counts):
+    char_counts = cue.display_char_counts if is_cjk else cue.char_counts
+    if any(c > line_char_threshold for c in char_counts):
         return None  # already violating
     joined_visible = " ".join(
         re.sub(r"</?(?:i|b|u|font)(?:\s[^>]*)?>", "", ln, flags=re.IGNORECASE).rstrip()
         for ln in cue.lines
     )
-    if len(joined_visible) <= LINE_CHAR_THRESHOLD:
-        return None  # joining wouldn't overflow
-    # Join the raw lines (markup preserved)
+    # wait, if CJK, length of joined visible might be shorter/longer but roughly similar.
+    # to be safe, just join the lines and measure.
     new_line = " ".join(ln for ln in cue.lines)
     mutated = SubtitleCue(
         index=cue.index,
@@ -210,7 +219,8 @@ def _apply_line_overflow(cue: SubtitleCue) -> SubtitleCue | None:
         end_ms=cue.end_ms,
         lines=[new_line],
     )
-    if not any(c > LINE_CHAR_THRESHOLD for c in mutated.char_counts):
+    mutated_char_counts = mutated.display_char_counts if is_cjk else mutated.char_counts
+    if not any(c > line_char_threshold for c in mutated_char_counts):
         return None
     return mutated
 
@@ -308,6 +318,11 @@ def corrupt_file(
         defects = set(ALL_DEFECT_TYPES)
     rng = __import__("random").Random(seed)  # local seed, never touches global state
 
+    # ── Resolve thresholds based on language ──────────────────────────────────
+    is_cjk = language.lower() in ("zh", "ja", "ko", "zh-tw", "zh-cn", "zh-hk", "zh-hant", "zh-hans")
+    cps_threshold = CPS_VIOLATION_CJK if is_cjk else CPS_VIOLATION
+    line_char_threshold = LINE_CHAR_MAX_CJK if is_cjk else LINE_CHAR_MAX
+
     cues: list[SubtitleCue] = list(source.cues)
     injected_defects: list[DefectSpec] = []
     used_cue_indices: set[int] = set()  # never apply two defects to the same cue
@@ -321,52 +336,55 @@ def corrupt_file(
     # ── 1. CPS blowout ───────────────────────────────────────────────────────
     if "cps_blowout" in defects:
         candidates = [i for i, c in enumerate(cues)
-                      if _apply_cps_blowout(c) is not None]
+                      if _apply_cps_blowout(c, cps_threshold, is_cjk) is not None]
         picks = rng.sample(candidates, k=min(2, len(candidates)))
         for i in sorted(picks):
             if not reserve(i):
                 continue
-            mutated = _apply_cps_blowout(cues[i])
+            mutated = _apply_cps_blowout(cues[i], cps_threshold, is_cjk)
             if mutated is None:
                 continue
             cues[i] = mutated
+            mutated_cps = mutated.cps_display if is_cjk else mutated.cps
+            total_chars = mutated.total_display_chars if is_cjk else mutated.total_chars
             injected_defects.append(DefectSpec(
                 cue_index=mutated.index,
                 defect_type="cps_blowout",
                 rule="cps_exceeded",
-                threshold=CPS_THRESHOLD,
-                measured_value=round(mutated.cps, 2),
+                threshold=cps_threshold,
+                measured_value=round(mutated_cps, 2),
                 severity="ERROR",
                 category="DETERMINISTIC",
                 detail=(
-                    f"Cue {mutated.index}: CPS={mutated.cps:.2f} > {CPS_THRESHOLD} "
-                    f"(dur={mutated.duration_ms}ms, chars={mutated.total_chars})"
+                    f"Cue {mutated.index}: CPS={mutated_cps:.2f} > {cps_threshold} "
+                    f"(dur={mutated.duration_ms}ms, chars={total_chars})"
                 ),
             ))
 
     # ── 2. Line overflow ─────────────────────────────────────────────────────
     if "line_overflow" in defects:
         candidates = [i for i, c in enumerate(cues)
-                      if _apply_line_overflow(c) is not None and i not in used_cue_indices]
+                      if _apply_line_overflow(c, line_char_threshold, is_cjk) is not None and i not in used_cue_indices]
         picks = rng.sample(candidates, k=min(2, len(candidates)))
         for i in sorted(picks):
             if not reserve(i):
                 continue
-            mutated = _apply_line_overflow(cues[i])
+            mutated = _apply_line_overflow(cues[i], line_char_threshold, is_cjk)
             if mutated is None:
                 continue
             cues[i] = mutated
-            max_line = max(mutated.char_counts)
+            char_counts = mutated.display_char_counts if is_cjk else mutated.char_counts
+            max_line = max(char_counts)
             injected_defects.append(DefectSpec(
                 cue_index=mutated.index,
                 defect_type="line_overflow",
                 rule="line_too_long",
-                threshold=LINE_CHAR_THRESHOLD,
+                threshold=line_char_threshold,
                 measured_value=float(max_line),
                 severity="ERROR",
                 category="DETERMINISTIC",
                 detail=(
-                    f"Cue {mutated.index}: longest line={max_line} chars > {LINE_CHAR_THRESHOLD}"
+                    f"Cue {mutated.index}: longest line={max_line} chars > {line_char_threshold}"
                 ),
             ))
 
@@ -543,12 +561,23 @@ def corrupt_demo(
     if defects is None:
         defects = {"cps_blowout", "line_overflow", "short_duration", "meaning_swap"}
 
+    # ── Resolve thresholds based on language ──────────────────────────────────
+    is_cjk = language.lower() in ("zh", "ja", "ko", "zh-tw", "zh-cn", "zh-hk", "zh-hant", "zh-hans")
+    cps_threshold = CPS_VIOLATION_CJK if is_cjk else CPS_VIOLATION
+    line_char_threshold = LINE_CHAR_MAX_CJK if is_cjk else LINE_CHAR_MAX
+
     rng = __import__("random").Random(seed)
 
     # Slice N cues and copy them, spacing them out to ensure they are clean and have ample timing room
-    # We must skip cues that are natively > 80 characters, as they can never be safely reflowed within 
-    # the 2-line/42-character limits and would permanently hold the delivery.
-    eligible_raw_cues = [c for c in source.cues if c.total_chars <= 80]
+    # We must skip cues that are natively > line_char_threshold * 2 characters, as they can never be safely reflowed within 
+    # the 2-line limit and would permanently hold the delivery.
+    def can_be_reflowed_to_two_lines(cue: SubtitleCue) -> bool:
+        from passline.agents.fixer_agent import _split_long_line
+        full_text = " ".join(ln.strip() for ln in cue.lines)
+        res = _split_long_line(full_text, max_chars=line_char_threshold, is_cjk=is_cjk)
+        return len(res) <= 2
+
+    eligible_raw_cues = [c for c in source.cues if can_be_reflowed_to_two_lines(c)]
     raw_cues = eligible_raw_cues[:excerpt_cues]
     cues = []
     current_time = 10000
@@ -590,7 +619,7 @@ def corrupt_demo(
 
     def is_repairable_timing(idx: int, target_cps: float = 16.0) -> bool:
         cue = cues[idx]
-        total_chars = cue.total_chars
+        total_chars = cue.total_display_chars if is_cjk else cue.total_chars
         if total_chars == 0:
             return True
         # Milliseconds required to sit strictly below target_cps
@@ -653,8 +682,8 @@ def corrupt_demo(
                     valid_candidates.extend([
                         (i, d_type) for i, c in enumerate(cues)
                         if i not in used_cue_indices
-                        and _apply_cps_blowout(c) is not None
-                        and c.total_chars <= 80
+                        and _apply_cps_blowout(c, cps_threshold, is_cjk) is not None
+                        and can_be_reflowed_to_two_lines(c)
                         and is_timing_safe(i)
                         and is_repairable_timing(i)
                     ])
@@ -662,8 +691,8 @@ def corrupt_demo(
                     valid_candidates.extend([
                         (i, d_type) for i, c in enumerate(cues)
                         if i not in used_cue_indices
-                        and _apply_line_overflow(c) is not None
-                        and c.total_chars <= 80
+                        and _apply_line_overflow(c, line_char_threshold, is_cjk) is not None
+                        and can_be_reflowed_to_two_lines(c)
                     ])
                 elif d_type == "short_duration":
                     valid_candidates.extend([
@@ -680,37 +709,40 @@ def corrupt_demo(
             pick_i, pick_dtype = rng.choice(valid_candidates)
             if reserve(pick_i):
                 if pick_dtype == "cps_blowout":
-                    mutated = _apply_cps_blowout(cues[pick_i])
+                    mutated = _apply_cps_blowout(cues[pick_i], cps_threshold, is_cjk)
                     if mutated is not None:
                         cues[pick_i] = mutated
+                        mutated_cps = mutated.cps_display if is_cjk else mutated.cps
+                        total_chars = mutated.total_display_chars if is_cjk else mutated.total_chars
                         injected_defects.append(DefectSpec(
                             cue_index=mutated.index,
                             defect_type="cps_blowout",
                             rule="cps_exceeded",
-                            threshold=CPS_THRESHOLD,
-                            measured_value=round(mutated.cps, 2),
+                            threshold=cps_threshold,
+                            measured_value=round(mutated_cps, 2),
                             severity="ERROR",
                             category="DETERMINISTIC",
                             detail=(
-                                f"Cue {mutated.index}: CPS={mutated.cps:.2f} > {CPS_THRESHOLD} "
-                                f"(dur={mutated.duration_ms}ms, chars={mutated.total_chars})"
+                                f"Cue {mutated.index}: CPS={mutated_cps:.2f} > {cps_threshold} "
+                                f"(dur={mutated.duration_ms}ms, chars={total_chars})"
                             ),
                         ))
                 elif pick_dtype == "line_overflow":
-                    mutated = _apply_line_overflow(cues[pick_i])
+                    mutated = _apply_line_overflow(cues[pick_i], line_char_threshold, is_cjk)
                     if mutated is not None:
                         cues[pick_i] = mutated
-                        max_line = max(mutated.char_counts)
+                        char_counts = mutated.display_char_counts if is_cjk else mutated.char_counts
+                        max_line = max(char_counts)
                         injected_defects.append(DefectSpec(
                             cue_index=mutated.index,
                             defect_type="line_overflow",
                             rule="line_too_long",
-                            threshold=LINE_CHAR_THRESHOLD,
+                            threshold=line_char_threshold,
                             measured_value=float(max_line),
                             severity="ERROR",
                             category="DETERMINISTIC",
                             detail=(
-                                f"Cue {mutated.index}: longest line={max_line} chars > {LINE_CHAR_THRESHOLD}"
+                                f"Cue {mutated.index}: longest line={max_line} chars > {line_char_threshold}"
                             ),
                         ))
                 elif pick_dtype == "short_duration":

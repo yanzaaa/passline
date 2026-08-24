@@ -113,6 +113,16 @@ class TestCJKProfile:
         assert len(latin_findings) < 10, f"Latin profile found {len(latin_findings)} findings"
         assert len(cjk_findings) > 50, f"CJK profile found only {len(cjk_findings)} findings"
 
+    def test_chinese_cjk_profile_wiring(self, clean_files: dict) -> None:
+        """The CJK profile must be correctly routed from the parsed subtitle file without passing language manually."""
+        if "zh" not in clean_files:
+            pytest.skip("Chinese file not available")
+        source = clean_files["zh"]
+        from passline.qc.rules import check_file
+
+        findings = check_file(source)
+        assert len(findings) > 50, f"Expected CJK violations, but got {len(findings)}"
+
 class TestDefectUnits:
     """Each test verifies one defect type using SubtitleCue's own computed properties."""
 
@@ -128,7 +138,7 @@ class TestDefectUnits:
         assert cue.total_chars >= 10
         assert cue.cps <= CPS_THRESHOLD
 
-        mutated = _apply_cps_blowout(cue)
+        mutated = _apply_cps_blowout(cue, CPS_THRESHOLD, False)
         assert mutated is not None, "Expected cue to be eligible for CPS blowout"
         # Verify via the model's computed property
         assert mutated.cps > CPS_THRESHOLD, (
@@ -142,7 +152,7 @@ class TestDefectUnits:
             lines=["This is a long line of text"],
         )
         assert cue.cps > CPS_THRESHOLD
-        assert _apply_cps_blowout(cue) is None
+        assert _apply_cps_blowout(cue, CPS_THRESHOLD, False) is None
 
     def test_line_overflow_exceeds_threshold(self) -> None:
         """After line-overflow injection, SubtitleCue.char_counts[0] > LINE_CHAR_THRESHOLD (42)."""
@@ -159,7 +169,7 @@ class TestDefectUnits:
         joined_len = sum(cue.char_counts) + len(cue.lines) - 1  # spaces
         assert joined_len > LINE_CHAR_THRESHOLD, "Test cue not long enough — fix test"
 
-        mutated = _apply_line_overflow(cue)
+        mutated = _apply_line_overflow(cue, LINE_CHAR_THRESHOLD, False)
         assert mutated is not None
         assert len(mutated.lines) == 1
         # Verify via the model's own computed property
@@ -170,7 +180,7 @@ class TestDefectUnits:
     def test_line_overflow_ineligible_single_line(self) -> None:
         """Single-line cues must not be eligible for line-overflow injection."""
         cue = SubtitleCue(index=1, start_ms=0, end_ms=2000, lines=["Short single line"])
-        assert _apply_line_overflow(cue) is None
+        assert _apply_line_overflow(cue, LINE_CHAR_THRESHOLD, False) is None
 
     def test_three_line_cue_has_three_lines(self) -> None:
         """After three-line injection on a 2-line cue, len(cue.lines) == 3."""
@@ -292,6 +302,11 @@ class TestManifestCorrectness:
         """Every DETERMINISTIC defect in the manifest is verified using SubtitleCue's computed properties."""
         _, broken = broken_files[lang]
         manifest = manifests[lang]
+        
+        from passline.qc.thresholds import CPS_VIOLATION_CJK, LINE_CHAR_MAX_CJK, CPS_VIOLATION, LINE_CHAR_MAX
+        is_cjk = lang.lower() in ("zh", "ja", "ko", "zh-tw", "zh-cn", "zh-hk", "zh-hant", "zh-hans")
+        cps_limit = CPS_VIOLATION_CJK if is_cjk else CPS_VIOLATION
+        line_limit = LINE_CHAR_MAX_CJK if is_cjk else LINE_CHAR_MAX
 
         cue_by_index = {c.index: c for c in broken.cues}
 
@@ -305,13 +320,15 @@ class TestManifestCorrectness:
             cue = cue_by_index[defect.cue_index]
 
             if defect.defect_type == "cps_blowout":
-                assert cue.cps > CPS_THRESHOLD, (
-                    f"cue {cue.index}: expected CPS > {CPS_THRESHOLD}, got {cue.cps:.2f}"
+                cue_cps = cue.cps_display if is_cjk else cue.cps
+                assert cue_cps > cps_limit, (
+                    f"cue {cue.index}: expected CPS > {cps_limit}, got {cue_cps:.2f}"
                 )
             elif defect.defect_type == "line_overflow":
-                assert any(c > LINE_CHAR_THRESHOLD for c in cue.char_counts), (
-                    f"cue {cue.index}: expected a line > {LINE_CHAR_THRESHOLD} chars, "
-                    f"got {cue.char_counts}"
+                char_counts = cue.display_char_counts if is_cjk else cue.char_counts
+                assert any(c > line_limit for c in char_counts), (
+                    f"cue {cue.index}: expected a line > {line_limit} chars, "
+                    f"got {char_counts}"
                 )
             elif defect.defect_type == "three_line_cue":
                 assert len(cue.lines) > 2, (
