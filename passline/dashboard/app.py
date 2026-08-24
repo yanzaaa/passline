@@ -235,7 +235,8 @@ async def upload(file: UploadFile, background_tasks: BackgroundTasks) -> JSONRes
         from passline.pipeline.runner import PipelineRunner
         runner = PipelineRunner(bus=bus, approval_queue=_approval_queue)
         is_demo = filename.lower().startswith("demo-")
-        report = await runner.run_delivery(srt_bytes, language, delivery_id=delivery_id, is_demo=is_demo)
+        is_hopeless = "hopeless" in filename.lower()
+        report = await runner.run_delivery(srt_bytes, language, delivery_id=delivery_id, is_demo=is_demo, is_hopeless=is_hopeless)
         _delivery_metadata[delivery_id] = report
         # Retrieve repaired bytes via the async-safe getter
         rb_final = b""

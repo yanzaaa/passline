@@ -263,6 +263,10 @@ class FixerAgent(LlmAgent):
                 unresolved_findings.append(finding)
             else:
                 # ── Language-level repair via LLM ─────────────────────────
+                if ctx.session.state.get("is_hopeless", False):
+                    unresolved_findings.append(finding)
+                    continue
+
                 cue_index = finding.get("cue_index", 0)
                 rule_ref = finding.get("rule_ref") or finding.get("rule", "Unknown")
                 
@@ -339,9 +343,10 @@ class FixerAgent(LlmAgent):
             cue_index = finding.get("cue_index", 0)
             rule = finding.get("rule", "")
             try:
+                timeout_val = float(os.getenv("PASSLINE_APPROVAL_TIMEOUT", "120.0"))
                 decision = await asyncio.wait_for(
                     self.approval_queue.await_decision(item.item_id),
-                    timeout=5.0
+                    timeout=timeout_val
                 )
             except asyncio.TimeoutError:
                 decision = "timeout"

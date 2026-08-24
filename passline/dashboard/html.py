@@ -1368,7 +1368,7 @@ async function triggerDemo(id, lang) {
     const srtResp = await fetch(`/api/demo/${encodeURIComponent(id)}`);
     if (!srtResp.ok) { console.warn('demo fetch failed', srtResp.status); return; }
     const blob = await srtResp.blob();
-    const filename = `tos-${lang.split('-')[0].toLowerCase()}-broken.srt`;
+    const filename = id === 'hopeless' ? `demo-hopeless-${lang.split('-')[0].toLowerCase()}.srt` : `demo-${lang.split('-')[0].toLowerCase()}-broken.srt`;
     const file = new File([blob], filename, {type: 'text/plain'});
     const label = document.querySelector('.dropzone-label');
     if (label) label.textContent = `▶ ${filename}`;

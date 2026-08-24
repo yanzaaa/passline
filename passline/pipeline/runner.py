@@ -67,6 +67,7 @@ class PipelineRunner:
         delivery_id: str | None = None,
         parent_id: str | None = None,
         is_demo: bool = False,
+        is_hopeless: bool = False,
     ) -> dict[str, Any]:
         """Run the full QC pipeline on *srt_bytes* and return the delivery report.
 
@@ -82,6 +83,8 @@ class PipelineRunner:
             Optional identifier for parent delivery.
         is_demo:
             If true, bypass the LLM coordinator.
+        is_hopeless:
+            If true, marks delivery as the hopeless case control.
 
         Returns
         -------
@@ -113,6 +116,7 @@ class PipelineRunner:
             "language": language,
             "delivery_id": delivery_id,
             "is_demo": is_demo,
+            "is_hopeless": is_hopeless,
         }
         if parent_id:
             state["parent_id"] = parent_id
