@@ -17,6 +17,92 @@ DEMO_DIR = Path(__file__).parent.parent / "passline" / "corpus" / "demo"
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("lang", ["fr", "es", "pt"])
+async def test_no_word_drops_in_repair(tmp_path: Path, lang: str) -> None:
+    """Ensure that the non-deterministic LLM language repairs do not drop words unless declared as a condensation."""
+    from passline.agents.pipeline import build_pipeline
+    
+    broken_srt_path = DEMO_DIR / f"demo-{lang}-broken.srt"
+    if not broken_srt_path.exists():
+        pytest.skip("Broken SRT not found")
+
+    srt_bytes = broken_srt_path.read_bytes()
+    
+    # We do not mock the LLM here. We want to catch the real LLM output (or let the test use the real one if --live-llm is provided).
+    # Since we can't guarantee live LLM in normal suite, we will mock the LLM to drop words, and check that the FixerAgent rejects it and retries, and if it still drops words, it marks it unfixable.
+    
+    bus = EventBus(tmp_path / f"word_drop_{lang}.jsonl")
+    approval_queue = ApprovalQueue(bus=bus)
+
+    # Let's mock the language checker to return a finding with NO suggested text
+    canned = LanguageCheckerOutput(
+        flags=[
+            LanguageFlag(
+                cue_index=3,
+                confidence=0.9,
+                rule_ref="MT01",
+                explanation="Demo explanation",
+                suggested_text=None,
+            )
+        ],
+        language=lang,
+        checked_cues=14,
+    )
+
+    class FakeResponse:
+        text = canned.model_dump_json()
+
+    fake_client = MagicMock()
+    fake_client.aio = MagicMock()
+    fake_client.aio.models = MagicMock()
+    fake_client.aio.models.generate_content = AsyncMock(return_value=FakeResponse())
+
+    def mock_build_coordinator(bus, approval_queue):
+        return build_pipeline(bus=bus, approval_queue=approval_queue)
+
+    approvals_requested = 0
+
+    async def gate_driver() -> None:
+        nonlocal approvals_requested
+        for _ in range(200):
+            await asyncio.sleep(0.05)
+            for item in list(approval_queue.pending()):
+                if item.status == "pending":
+                    approvals_requested += 1
+                    approval_queue.approve(item.item_id)
+
+    # We mock _propose_language_fix to return a word-dropping string
+    with patch("passline.agents.language_checker.LanguageCheckerAgent._get_client", return_value=fake_client), \
+         patch("passline.agents.language_checker._call_genai_with_retry", new_callable=AsyncMock, return_value=canned), \
+         patch("passline.agents.coordinator.build_coordinator", side_effect=mock_build_coordinator), \
+         patch("passline.agents.fixer_agent.FixerAgent._propose_language_fix", new_callable=AsyncMock, return_value="Short") as mock_propose:
+         
+        runner = PipelineRunner(bus=bus, approval_queue=approval_queue)
+        gate_task = asyncio.create_task(gate_driver())
+        try:
+            report = await runner.run_delivery(srt_bytes, language=lang, delivery_id=f"demo-{lang}-drop")
+        finally:
+            gate_task.cancel()
+            try:
+                await gate_task
+            except asyncio.CancelledError:
+                pass
+                
+        # Fixer should have retried once, so _propose_language_fix called twice
+        assert mock_propose.call_count == 2
+        # Since it still dropped words on retry, it should have enqueued ZERO approvals for it
+        assert approvals_requested == 0
+        
+        # Delivery should be failed with the language finding unresolved
+        assert report["verdict"] == "failed"
+        
+        # Verify QC_UNFIXABLE was emitted
+        events = bus.read_all()
+        unfixable = [e for e in events if e.event_type == "qc.unfixable"]
+        assert len(unfixable) == 1
+        assert unfixable[0].details["reason"] == "No replacement could be generated"
+
+@pytest.mark.anyio
 @pytest.mark.parametrize(
     "lang,seed,meaning_cue",
     [
@@ -97,7 +183,7 @@ async def test_demo_repairability(tmp_path: Path, lang: str, seed: int, meaning_
     ), patch(
         "passline.agents.fixer_agent.FixerAgent._propose_language_fix",
         new_callable=AsyncMock,
-        return_value="Genuinely changed text for meaning swap",
+        return_value="a b c d e f g h i j k l m n o p q r s t",
     ):
         runner = PipelineRunner(bus=bus, approval_queue=approval_queue)
 
@@ -123,7 +209,7 @@ async def test_demo_repairability(tmp_path: Path, lang: str, seed: int, meaning_
     assert repaired_bytes, "No repaired bytes returned"
     
     if meaning_cue > 0:
-        assert b"Genuinely changed text for meaning swap" in repaired_bytes
+        assert b"a b c d e f g h i j k l m n o p q r s t" in repaired_bytes
 
     # Re-parsed repaired SRT grades clean via check_file()
     repaired_file = parse_srt(repaired_bytes, language=lang)

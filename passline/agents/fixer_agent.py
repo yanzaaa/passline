@@ -369,10 +369,32 @@ class FixerAgent(LlmAgent):
                 explanation = finding.get("explanation", "Language quality issue")
                 
                 async def _get_proposal(f, o_text, expl, r_ref):
+                    def _count_words(text: str) -> int:
+                        from passline.models.subtitle import _strip_markup
+                        import re
+                        clean = _strip_markup(text).lower()
+                        if language.lower() in ("zh", "ja", "ko", "zh-tw", "zh-cn", "zh-hk", "zh-hant", "zh-hans"):
+                            return len(clean.replace(" ", ""))
+                        return len([w for w in re.findall(r'\w+', clean) if w])
+                        
                     prop = f.get("suggested_text")
                     if not prop or not prop.strip() or prop.strip() == o_text.strip():
                         prop = await self._propose_language_fix(o_text, expl, language)
-                    return (f, o_text, prop, expl, r_ref)
+                        
+                    is_condensation = f.get("rule", "") in ("cps_exceeded", "line_too_long", "condensation") or "condensation" in expl.lower()
+                    
+                    if prop and not is_condensation:
+                        o_words = _count_words(o_text)
+                        p_words = _count_words(prop)
+                        if p_words < o_words:
+                            # Retry once
+                            prop = await self._propose_language_fix(o_text, expl + " (CRITICAL INSTRUCTION: You must preserve every single word of dialogue. Do not delete any text or clauses.)", language)
+                            if prop:
+                                p_words = _count_words(prop)
+                                if p_words < o_words:
+                                    prop = None # Mark unfixable if retry still drops words
+
+                    return (f, o_text, prop, expl, r_ref, is_condensation)
 
                 language_tasks.append(_get_proposal(finding, original_text, explanation, rule_ref))
 
@@ -383,15 +405,16 @@ class FixerAgent(LlmAgent):
 
         # Enqueue all valid meaning-changing edits
         pending_items = []
-        for finding, original_text, proposed_text, explanation, rule_ref in proposals:
+        for finding, original_text, proposed_text, explanation, rule_ref, is_condensation in proposals:
             cue_index = finding.get("cue_index", 0)
             if proposed_text and proposed_text.strip() != original_text.strip():
+                reason_text = explanation + " (Condensation)" if is_condensation else explanation
                 item = self.approval_queue.make_item(
                     delivery_id=delivery_id,
                     cue_index=cue_index,
                     original_text=original_text,
                     proposed_text=proposed_text,
-                    reason=explanation,
+                    reason=reason_text,
                     rule_ref=rule_ref,
                     confidence=finding.get("confidence", 0.0),
                     explanation=explanation,
