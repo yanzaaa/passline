@@ -6,24 +6,14 @@
   "seed": 19,
   "defects": [
     {
-      "cue_index": 1,
+      "cue_index": 2,
       "defect_type": "auto-detected",
-      "rule": "cps_exceeded",
-      "threshold": 20.0,
-      "measured_value": 22.020725388601036,
+      "rule": "line_too_long",
+      "threshold": 42.0,
+      "measured_value": 54.0,
       "severity": "ERROR",
       "category": "rule",
-      "detail": "Rule cps_exceeded triggered"
-    },
-    {
-      "cue_index": 1,
-      "defect_type": "auto-detected",
-      "rule": "sub_one_second",
-      "threshold": 1000.0,
-      "measured_value": 772.0,
-      "severity": "ERROR",
-      "category": "rule",
-      "detail": "Rule sub_one_second triggered"
+      "detail": "Rule line_too_long triggered"
     },
     {
       "cue_index": 4,
@@ -56,24 +46,14 @@
       "detail": "Rule sub_one_second triggered"
     },
     {
-      "cue_index": 9,
+      "cue_index": 8,
       "defect_type": "auto-detected",
       "rule": "cps_exceeded",
       "threshold": 20.0,
-      "measured_value": 65.0,
+      "measured_value": 22.007042253521128,
       "severity": "ERROR",
       "category": "rule",
       "detail": "Rule cps_exceeded triggered"
-    },
-    {
-      "cue_index": 9,
-      "defect_type": "auto-detected",
-      "rule": "sub_one_second",
-      "threshold": 1000.0,
-      "measured_value": 400.0,
-      "severity": "ERROR",
-      "category": "rule",
-      "detail": "Rule sub_one_second triggered"
     },
     {
       "cue_index": 10,
@@ -96,24 +76,14 @@
       "detail": "Rule cps_exceeded triggered"
     },
     {
-      "cue_index": 13,
+      "cue_index": 14,
       "defect_type": "auto-detected",
       "rule": "cps_exceeded",
       "threshold": 20.0,
-      "measured_value": 85.0,
+      "measured_value": 22.0,
       "severity": "ERROR",
       "category": "rule",
       "detail": "Rule cps_exceeded triggered"
-    },
-    {
-      "cue_index": 13,
-      "defect_type": "auto-detected",
-      "rule": "sub_one_second",
-      "threshold": 1000.0,
-      "measured_value": 400.0,
-      "severity": "ERROR",
-      "category": "rule",
-      "detail": "Rule sub_one_second triggered"
     }
   ]
 }

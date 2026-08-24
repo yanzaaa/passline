@@ -4,5 +4,86 @@
   "language": "zh",
   "source_file": "tos-zh.srt",
   "seed": 42,
-  "defects": []
+  "defects": [
+    {
+      "cue_index": 2,
+      "defect_type": "cps_blowout",
+      "rule": "cps_exceeded",
+      "threshold": 20.0,
+      "measured_value": 22.0,
+      "severity": "ERROR",
+      "category": "DETERMINISTIC",
+      "detail": "Cue 2: CPS=22.00 > 20.0 (dur=909ms, chars=20)"
+    },
+    {
+      "cue_index": 9,
+      "defect_type": "three_line_cue",
+      "rule": "three_line_cue",
+      "threshold": 2.0,
+      "measured_value": 3.0,
+      "severity": "WARNING",
+      "category": "DETERMINISTIC",
+      "detail": "Cue 9: 3 lines (max is 2)"
+    },
+    {
+      "cue_index": 10,
+      "defect_type": "cps_blowout",
+      "rule": "cps_exceeded",
+      "threshold": 20.0,
+      "measured_value": 22.02,
+      "severity": "ERROR",
+      "category": "DETERMINISTIC",
+      "detail": "Cue 10: CPS=22.02 > 20.0 (dur=545ms, chars=12)"
+    },
+    {
+      "cue_index": 13,
+      "defect_type": "short_duration",
+      "rule": "sub_one_second",
+      "threshold": 1000.0,
+      "measured_value": 400.0,
+      "severity": "ERROR",
+      "category": "DETERMINISTIC",
+      "detail": "Cue 13: duration=400ms < 1000ms"
+    },
+    {
+      "cue_index": 15,
+      "defect_type": "overlap",
+      "rule": "overlapping_cues",
+      "threshold": 0.0,
+      "measured_value": 500.0,
+      "severity": "ERROR",
+      "category": "DETERMINISTIC",
+      "detail": "Cue 15 end=193500ms overlaps cue 16 start=193000ms by 500ms"
+    },
+    {
+      "cue_index": 21,
+      "defect_type": "short_duration",
+      "rule": "sub_one_second",
+      "threshold": 1000.0,
+      "measured_value": 400.0,
+      "severity": "ERROR",
+      "category": "DETERMINISTIC",
+      "detail": "Cue 21: duration=400ms < 1000ms"
+    },
+    {
+      "cue_index": 41,
+      "defect_type": "three_line_cue",
+      "rule": "three_line_cue",
+      "threshold": 2.0,
+      "measured_value": 3.0,
+      "severity": "WARNING",
+      "category": "DETERMINISTIC",
+      "detail": "Cue 41: 3 lines (max is 2)"
+    },
+    {
+      "cue_index": 65,
+      "defect_type": "overlap",
+      "rule": "overlapping_cues",
+      "threshold": 0.0,
+      "measured_value": 500.0,
+      "severity": "ERROR",
+      "category": "DETERMINISTIC",
+      "detail": "Cue 65 end=430500ms overlaps cue 66 start=430000ms by 500ms"
+    }
+  ]
 }

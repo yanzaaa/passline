@@ -1,9 +1,9 @@
 1
-00:00:10,000 --> 00:00:13,000
+00:00:10,000 --> 00:00:10,909
 You're a jerk, Thom.
 
 2
-00:00:15,500 --> 00:00:15,900
+00:00:15,500 --> 00:00:19,083
 Look Celia, we have to follow our passions;
 
 3
@@ -12,16 +12,15 @@ Look Celia, we have to follow our passions;
 just want to be awesome in space.
 
 4
-00:00:29,499 --> 00:00:29,899
-Why don't you just admit that
-you're freaked out by my robot hand?
+00:00:29,499 --> 00:00:34,915
+Why don't you just admit that you're freaked out by my robot hand?
 
 5
 00:00:37,415 --> 00:00:40,415
 I'm not freaked out by- it's...
 
 6
-00:00:42,915 --> 00:00:43,687
+00:00:42,915 --> 00:00:45,915
 ...alright! Fine!
 
 7
@@ -39,7 +38,7 @@ that I'm being chased...
 Whatever, Thom. We're done.
 
 10
-00:01:08,247 --> 00:01:11,247
+00:01:08,247 --> 00:01:08,647
 Robot's memory synced and locked!
 
 11

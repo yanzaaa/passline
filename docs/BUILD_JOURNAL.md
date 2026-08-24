@@ -16,7 +16,7 @@ anywhere in the dependency tree.
 | Deliverable | Description |
 |---|---|
 | Subtitle cue data model | `SubtitleCue` and `SubtitleFile` (Pydantic v2, frozen) with millisecond-precision timing, computed `cps`, `char_counts`, `total_chars` |
-| SRT parser / writer | `parse_srt()` and `write_srt()` with **byte-identical round-trip guarantee** for LF, CRLF, and UTF-8 BOM variants |
+| SRT parser / writer | `parse_srt()` and `write_srt()` with **byte-identical round-trip guarantee for canonically formatted SRT**. Redundant blank lines and trailing whitespace are normalised, and the `is_canonical` flag reports which case a given file falls into. |
 | Delivery event log | `EventBus` + `DeliveryEvent` (schema v1.0) appending to a local JSONL file; `subtitle.submitted` event emitted on ingest |
 | ADK QC agent stub | `QcAgent` — Google ADK `LlmAgent` backed by `gemini-2.0-flash` for language-level subtitle QC |
 | Google-stack entry point | `python -m passline` constructs both `google-adk` and `google-genai` objects at startup and prints a smoke-test banner |
@@ -419,7 +419,7 @@ gcloud run deploy passline --source . --region us-east1 \
 
 ### Result
 
-**246 tests passing, 3 skipped** (live LLM tests behind `--live-llm`) — `python -m pytest`
+**282 tests passing, 3 skipped** (live LLM tests behind `--live-llm`) — `python -m pytest`
 
 ### Plan
 

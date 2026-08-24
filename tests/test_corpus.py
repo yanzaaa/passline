@@ -46,7 +46,7 @@ CLEAN   = CORPUS / "clean"
 BROKEN  = CORPUS / "broken"
 MANIFEST_DIR = CORPUS / "manifests"
 
-LANGUAGES = ["en", "fr", "de"]
+LANGUAGES = ["en", "fr", "de", "es", "ru", "pt", "zh", "fa"]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -94,6 +94,24 @@ def manifests() -> dict[str, CorpusManifest]:
 # ─────────────────────────────────────────────────────────────────────────────
 # Group A — Defect-type unit tests (synthetic cues)
 # ─────────────────────────────────────────────────────────────────────────────
+
+class TestCJKProfile:
+    def test_chinese_cjk_profile(self, clean_files: dict) -> None:
+        """The CJK profile must natively flag Chinese cues that slip past Latin thresholds."""
+        if "zh" not in clean_files:
+            pytest.skip("Chinese file not available")
+        source = clean_files["zh"]
+        from passline.qc.rules import check_file
+
+        # Under the 'en' profile (Latin), these short but display-wide cues pass clean
+        latin_findings = check_file(source, language="en")
+        
+        # Under the 'zh' profile (CJK), the native file should produce ~96 violations (line length + CPS)
+        cjk_findings = check_file(source, language="zh")
+
+        # Let's loosely assert the magnitude to be roughly around 2 vs 96
+        assert len(latin_findings) < 10, f"Latin profile found {len(latin_findings)} findings"
+        assert len(cjk_findings) > 50, f"CJK profile found only {len(cjk_findings)} findings"
 
 class TestDefectUnits:
     """Each test verifies one defect type using SubtitleCue's own computed properties."""

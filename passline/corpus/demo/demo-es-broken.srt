@@ -3,7 +3,7 @@
 Eres un imbécil, Thom.
 
 2
-00:00:15,500 --> 00:00:15,900
+00:00:15,500 --> 00:00:17,545
 Mira Celia, debemos seguir nuestras pasiones;
 
 3
@@ -12,7 +12,7 @@ Mira Celia, debemos seguir nuestras pasiones;
 solo quiero ser fantástico en el espacio.
 
 4
-00:00:30,166 --> 00:00:30,566
+00:00:30,166 --> 00:00:32,802
 ¡¿Por qué no admites que estás
 asustado de mi brazo robot?!
 
@@ -21,28 +21,27 @@ asustado de mi brazo robot?!
 No estoy asustado de- es...
 
 6
-00:00:42,999 --> 00:00:43,399
+00:00:42,999 --> 00:00:45,999
 ...bueno! ¡Está bien!
 
 7
 00:00:48,499 --> 00:00:52,915
-¡Estoy asustado! Tengo pesadillas
-de ser perseguido...
+¡Estoy asustado! Tengo pesadillas de ser perseguido...
 
 8
-00:00:55,415 --> 00:00:57,415
+00:00:55,415 --> 00:00:59,081
 ...por esas garras robóticas de la muerte...
 
 9
-00:01:01,581 --> 00:01:04,581
+00:01:01,581 --> 00:01:01,981
 Lo que sea, Thom. Esto se terminó.
 
 10
-00:01:07,081 --> 00:01:07,481
+00:01:07,081 --> 00:01:10,664
 ¡Memoria del robot sincronizada y guardada!
 
 11
-00:01:13,164 --> 00:01:16,164
+00:01:13,164 --> 00:01:13,564
 Esto es bastante raro.
 
 12
@@ -50,10 +49,10 @@ Esto es bastante raro.
 ¿No deberías estar abajo?
 
 13
-00:01:24,164 --> 00:01:27,164
+00:01:24,164 --> 00:01:24,564
 Los escuché hablando anoche.
 
 14
-00:01:29,664 --> 00:01:30,664
+00:01:29,664 --> 00:01:32,664
 No es mi culpa, sabes.
 
