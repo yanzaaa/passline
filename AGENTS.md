@@ -104,7 +104,7 @@ RootCoordinator (LlmAgent, gemini-3-flash-preview)
 
 ## Testing
 
-- **234 tests passing, 3 skipped**: `python -m pytest`
+- **235 tests passing, 3 skipped**: `python -m pytest`
 - `--live-llm` flag enables tests that make real LLM API calls
 - Pipeline tests in `tests/test_pipeline.py` — fully offline, no LLM calls
 - Dashboard tests in `tests/test_dashboard.py` — async ASGI via `httpx.ASGITransport`

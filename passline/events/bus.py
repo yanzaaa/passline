@@ -36,6 +36,7 @@ class EventType(str, Enum):
     SUBTITLE_SUBMITTED = "subtitle.submitted"
     QC_VIOLATION = "qc.violation"
     QC_REPAIRED = "qc.repaired"
+    QC_UNFIXABLE = "qc.unfixable"
     DELIVERY_PASSED = "delivery.passed"
 
     # ── Schema 1.2 — dashboard station + analysis events ─────────────────────

@@ -419,7 +419,7 @@ gcloud run deploy passline --source . --region us-central1 \
 
 ### Result
 
-**234 tests passing, 3 skipped** (live LLM tests behind `--live-llm`) — `python -m pytest`
+**235 tests passing, 3 skipped** (live LLM tests behind `--live-llm`) — `python -m pytest`
 
 ### Plan
 

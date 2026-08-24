@@ -119,6 +119,68 @@ async def test_demo_repairability(tmp_path: Path, lang: str, seed: int, meaning_
 
 
 @pytest.mark.anyio
+async def test_fixer_requests_proposal_when_checker_omits_it(tmp_path: Path) -> None:
+    """If LanguageChecker omits suggested_text, FixerAgent must explicitly request one and enqueue it."""
+    from passline.agents.pipeline import build_pipeline
+    
+    lang = "en"
+    srt_bytes = b"1\n00:00:01,000 --> 00:00:03,000\nHello world.\n\n"
+    
+    bus = EventBus(tmp_path / "fixer_test.jsonl")
+    approval_queue = ApprovalQueue(bus=bus)
+
+    canned = LanguageCheckerOutput(
+        flags=[
+            LanguageFlag(
+                cue_index=1,
+                confidence=0.87,
+                rule_ref="MT01",
+                explanation="Demo explanation",
+                suggested_text=None,
+            )
+        ],
+        language=lang,
+        checked_cues=1,
+    )
+
+    class FakeResponse:
+        text = canned.model_dump_json()
+
+    fake_client = MagicMock()
+    fake_client.aio = MagicMock()
+    fake_client.aio.models = MagicMock()
+    fake_client.aio.models.generate_content = AsyncMock(return_value=FakeResponse())
+
+    def mock_build_coordinator(bus, approval_queue):
+        return build_pipeline(bus=bus, approval_queue=approval_queue)
+
+    approvals_requested = 0
+
+    async def gate_driver() -> None:
+        nonlocal approvals_requested
+        for _ in range(200):
+            await asyncio.sleep(0.05)
+            for item in list(approval_queue.pending()):
+                if item.status == "pending":
+                    approvals_requested += 1
+                    approval_queue.approve(item.item_id)
+
+    with patch("passline.agents.language_checker.LanguageCheckerAgent._get_client", return_value=fake_client), \
+         patch("passline.agents.language_checker._call_genai_with_retry", new_callable=AsyncMock, return_value=canned), \
+         patch("passline.agents.coordinator.build_coordinator", side_effect=mock_build_coordinator), \
+         patch("passline.agents.fixer_agent.FixerAgent._propose_language_fix", new_callable=AsyncMock, return_value="Proposed text different") as mock_propose:
+         
+        runner = PipelineRunner(bus=bus, approval_queue=approval_queue)
+        gate_task = asyncio.create_task(gate_driver())
+        try:
+            report = await runner.run_delivery(srt_bytes, language=lang, delivery_id="test-fixer")
+        finally:
+            gate_task.cancel()
+            
+        mock_propose.assert_called_once()
+        assert approvals_requested == 1
+
+@pytest.mark.anyio
 @pytest.mark.parametrize("action", ["approve", "reject"])
 async def test_language_approval_outcomes(tmp_path: Path, action: str) -> None:
     """Ensure an approved language fix clears and a rejected one holds."""

@@ -280,7 +280,9 @@ class FixerAgent(LlmAgent):
                 explanation = finding.get("explanation", "Language quality issue")
                 
                 async def _get_proposal(f, o_text, expl, r_ref):
-                    prop = await self._propose_language_fix(o_text, expl, language)
+                    prop = f.get("suggested_text")
+                    if not prop or not prop.strip() or prop.strip() == o_text.strip():
+                        prop = await self._propose_language_fix(o_text, expl, language)
                     return (f, o_text, prop, expl, r_ref)
 
                 language_tasks.append(_get_proposal(finding, original_text, explanation, rule_ref))
@@ -293,10 +295,11 @@ class FixerAgent(LlmAgent):
         # Enqueue all valid meaning-changing edits
         pending_items = []
         for finding, original_text, proposed_text, explanation, rule_ref in proposals:
+            cue_index = finding.get("cue_index", 0)
             if proposed_text and proposed_text.strip() != original_text.strip():
                 item = self.approval_queue.make_item(
                     delivery_id=delivery_id,
-                    cue_index=finding.get("cue_index", 0),
+                    cue_index=cue_index,
                     original_text=original_text,
                     proposed_text=proposed_text,
                     reason=explanation,
@@ -307,6 +310,28 @@ class FixerAgent(LlmAgent):
                 self.approval_queue.enqueue(item)
                 pending_items.append((item, finding, original_text, proposed_text, rule_ref))
             else:
+                rule = finding.get("rule", "")
+                repair_log.append({
+                    "rule": rule,
+                    "rule_ref": rule_ref,
+                    "cue_index": cue_index,
+                    "type": "language",
+                    "approved": False,
+                    "status": "unfixable",
+                    "original": original_text,
+                    "proposed": None,
+                })
+                self.bus.emit(DeliveryEvent(
+                    event_type=EventType.QC_UNFIXABLE,
+                    delivery_id=delivery_id,
+                    language=language,
+                    details={
+                        "rule": rule,
+                        "rule_ref": rule_ref,
+                        "cue": cue_index,
+                        "reason": "No replacement could be generated"
+                    }
+                ))
                 unresolved_findings.append(finding)
 
         # Await decisions sequentially (human responds one by one)

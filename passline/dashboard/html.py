@@ -687,9 +687,10 @@ function setSseStatus(state) { // 'live' | 'reconnecting' | 'polling' | 'offline
 const HANDLERS = {
   'subtitle.submitted': (ev) => { addDeliveryCard(ev);           addLog(ev, 'lifecycle'); },
   'station.working':    (ev) => { setLamp(ev.details.station_id, 'working');  addLog(ev, 'station'); },
-  'station.ready':      (ev) => { setLamp(ev.details.station_id, 'ready');    addLog(ev, 'station'); },
+  'station.ready':      (ev) => { setLamp(ev.details.station_id, 'ready', ev.details);    addLog(ev, 'station'); },
   'qc.violation':       (ev) => { markViolation(ev);             addLog(ev, 'violation'); updateHolds(); },
   'qc.repaired':        (ev) => { markRepaired(ev);              addLog(ev, 'repaired'); updateDiff(ev); },
+  'qc.unfixable':       (ev) => { addLog(ev, 'violation'); updateHolds(); },
   'cue.analysis':       (ev) => { renderHeatStrip(ev.details.cues || []); addLog(ev, 'lifecycle'); },
   'approval.required':  (ev) => { addLog(ev, 'approval'); },
   'delivery.passed':    (ev) => { markCleared(ev);               addLog(ev, 'lifecycle'); updateHolds(); },
@@ -1099,6 +1100,7 @@ const LOG_TYPES = {
   'station.ready':      ['station',   'STATION   '],
   'qc.violation':       ['violation', 'VIOLATION '],
   'qc.repaired':        ['repaired',  'REPAIRED  '],
+  'qc.unfixable':       ['violation', 'UNFIXABLE '],
   'cue.analysis':       ['lifecycle', 'ANALYSIS  '],
   'approval.required':  ['approval',  'APPROVAL  '],
   'approval.timeout':   ['approval',  'TIMEOUT   '],
@@ -1172,6 +1174,7 @@ function buildLogDetail(ev) {
       return `cue#${d.cue}  ${d.rule}  val=${val}${unit}  limit=${limit}${unit}`;
     }
     case 'qc.repaired':        return `cue#${d.cue}  ${d.rule}  repaired`;
+    case 'qc.unfixable':       return `cue#${d.cue}  ${d.rule}  ${d.reason || 'unfixable'}`;
     case 'cue.analysis':       return `${(d.cues||[]).length} cues analysed`;
     case 'approval.required':  return `${d.reason || 'review required'}`;
     case 'approval.timeout':   return `No human decision was made`;
