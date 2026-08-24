@@ -40,13 +40,21 @@ class PipelineRunner:
         self._session_service = InMemorySessionService()
         self._last_session_id: str | None = None
 
-    def _build_runner(self) -> Runner:
-        coordinator = build_coordinator(
-            bus=self._bus,
-            approval_queue=self._approval_queue,
-        )
+    def _build_runner(self, is_demo: bool = False) -> Runner:
+        if is_demo:
+            from passline.agents.pipeline import build_pipeline
+            agent = build_pipeline(
+                bus=self._bus,
+                approval_queue=self._approval_queue,
+            )
+        else:
+            from passline.agents.coordinator import build_coordinator
+            agent = build_coordinator(
+                bus=self._bus,
+                approval_queue=self._approval_queue,
+            )
         return Runner(
-            agent=coordinator,
+            agent=agent,
             app_name=_APP_NAME,
             session_service=self._session_service,
             auto_create_session=True,
@@ -58,6 +66,7 @@ class PipelineRunner:
         language: str = "und",
         delivery_id: str | None = None,
         parent_id: str | None = None,
+        is_demo: bool = False,
     ) -> dict[str, Any]:
         """Run the full QC pipeline on *srt_bytes* and return the delivery report.
 
@@ -71,6 +80,8 @@ class PipelineRunner:
             Optional identifier for this delivery run.  Auto-generated if None.
         parent_id:
             Optional identifier for parent delivery.
+        is_demo:
+            If true, bypass the LLM coordinator.
 
         Returns
         -------
@@ -101,6 +112,7 @@ class PipelineRunner:
             "srt_bytes": srt_bytes,
             "language": language,
             "delivery_id": delivery_id,
+            "is_demo": is_demo,
         }
         if parent_id:
             state["parent_id"] = parent_id
@@ -112,7 +124,7 @@ class PipelineRunner:
             state=state,
         )
 
-        runner = self._build_runner()
+        runner = self._build_runner(is_demo=is_demo)
 
         try:
             async for _ev in runner.run_async(
@@ -126,6 +138,8 @@ class PipelineRunner:
                 pass  # Events reach the dashboard via the bus; we drain the ADK stream
 
         except Exception as exc:
+            import traceback
+            traceback.print_exc()
             log.error("PipelineRunner: delivery %s failed — %s", delivery_id, exc)
             self._bus.emit(DeliveryEvent(
                 event_type=EventType.QC_VIOLATION,

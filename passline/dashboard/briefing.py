@@ -91,7 +91,16 @@ class BriefingGenerator:
         logger.info("Generating spoken briefing for %s (V1: Puck, V2: Charon, V3: Kore)", delivery_id)
 
         try:
-            client = GenaiClient()
+            api_key = os.getenv("GOOGLE_API_KEY")
+            project = os.getenv("GOOGLE_CLOUD_PROJECT")
+            location = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+            
+            if project:
+                client = GenaiClient(project=project, location=location)
+            elif api_key:
+                client = GenaiClient(api_key=api_key)
+            else:
+                client = GenaiClient(location=location)
         except Exception as exc:
             logger.error("Failed to initialize GenaiClient: %s", exc)
             raise BriefingError(f"GenaiClient init failed: {exc}")
@@ -110,7 +119,7 @@ class BriefingGenerator:
                 )
 
                 response = client.models.generate_content(
-                    model="gemini-2.5-flash",
+                    model="gemini-2.5-flash-preview-tts",
                     contents=text,
                     config=types.GenerateContentConfig(
                         response_modalities=["AUDIO"],
@@ -119,8 +128,8 @@ class BriefingGenerator:
                 )
 
                 # Extract audio bytes
-                audio_bytes = response.candidates[0].content.parts[0].inline_data.data
-                wavs.append(audio_bytes)
+                raw_audio_bytes = response.candidates[0].content.parts[0].inline_data.data
+                wavs.append(self._raw_to_wav(raw_audio_bytes))
             except Exception as exc:
                 logger.error("TTS generation failed for voice %s: %s", voice_name, exc)
                 raise BriefingError(f"TTS generation failed for voice {voice_name}: {exc}")
@@ -132,6 +141,15 @@ class BriefingGenerator:
         except Exception as exc:
             logger.error("Failed to merge WAV files: %s", exc)
             raise BriefingError(f"WAV merge failed: {exc}")
+
+    def _raw_to_wav(self, raw_bytes: bytes) -> bytes:
+        output = io.BytesIO()
+        with wave.open(output, "wb") as out_wav:
+            out_wav.setnchannels(1)
+            out_wav.setsampwidth(2) # 16-bit
+            out_wav.setframerate(24000)
+            out_wav.writeframes(raw_bytes)
+        return output.getvalue()
 
     def _merge_wavs(self, wav_bytes_list: list[bytes]) -> bytes:
         if not wav_bytes_list:

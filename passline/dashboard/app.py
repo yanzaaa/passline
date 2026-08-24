@@ -29,7 +29,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Request, Response, UploadFile, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 
-from passline.events.bus import DeliveryEvent, EventBus
+from passline.events.bus import DeliveryEvent, EventBus, EventType
 from passline.dashboard.replay import start_replay, stop_replay
 from passline.dashboard.html import DASHBOARD_HTML
 from passline.pipeline.approval import ApprovalQueue, approval_queue as _approval_queue
@@ -55,6 +55,10 @@ _delivery_metadata: dict[str, dict] = {}
 # Briefing cache and generator
 _briefing_cache: dict[str, bytes] = {}
 _briefing_generator = BriefingGenerator()
+
+# Running delivery tasks
+import asyncio
+_active_deliveries: set[asyncio.Task] = set()
 
 # Demo corpus directory (bundled inside the package for Cloud Run)
 _DEMO_DIR = Path(__file__).parent.parent / "corpus" / "demo"
@@ -155,6 +159,17 @@ async def stop() -> JSONResponse:
 async def reset() -> JSONResponse:
     """Truncate the event log and stop replay for a clean board take."""
     stop_replay()
+    
+    # Cancel all active delivery tasks
+    for task in list(_active_deliveries):
+        task.cancel()
+    _active_deliveries.clear()
+    
+    # Reject/Resolve any pending approvals
+    for item in list(_approval_queue.pending()):
+        if item.status == "pending":
+            _approval_queue.reject(item.item_id)
+            
     try:
         _LOG_PATH.write_text("")
     except OSError as exc:
@@ -183,15 +198,51 @@ async def upload(file: UploadFile, background_tasks: BackgroundTasks) -> JSONRes
     import uuid
     delivery_id = str(uuid.uuid4())
 
+    def _emit_final_event(report: dict, repaired_bytes: bytes, delivery_id: str, language: str) -> None:
+        verdict = report.get("verdict", "unknown")
+        if verdict == "passed":
+            bus.emit(DeliveryEvent(
+                event_type=EventType.DELIVERY_PASSED,
+                delivery_id=delivery_id,
+                language=language,
+                details={
+                    "repairs_applied": report.get("repairs_applied", 0),
+                    "verdict": "passed",
+                    "repaired_file_exists": len(repaired_bytes) > 0,
+                },
+            ))
+        else:
+            remaining = report.get("violations_found", {}).get("remaining_after_repair", 0)
+            per_rule_breakdown = {}
+            for f in report.get("all_findings", []):
+                rule_name = f.get("rule") or f.get("rule_ref") or "unknown"
+                per_rule_breakdown[rule_name] = per_rule_breakdown.get(rule_name, 0) + 1
+
+            bus.emit(DeliveryEvent(
+                event_type=EventType.DELIVERY_FAILED,
+                delivery_id=delivery_id,
+                language=language,
+                details={
+                    "verdict": "failed",
+                    "remaining_violations": remaining,
+                    "per_rule_breakdown": per_rule_breakdown,
+                    "repaired_file_exists": len(repaired_bytes) > 0,
+                    "summary": f"{remaining} violation(s) remain after repair",
+                },
+            ))
+
     async def _run_and_store() -> None:
         from passline.pipeline.runner import PipelineRunner
         runner = PipelineRunner(bus=bus, approval_queue=_approval_queue)
-        report = await runner.run_delivery(srt_bytes, language, delivery_id=delivery_id)
+        is_demo = filename.lower().startswith("demo-")
+        report = await runner.run_delivery(srt_bytes, language, delivery_id=delivery_id, is_demo=is_demo)
         _delivery_metadata[delivery_id] = report
         # Retrieve repaired bytes via the async-safe getter
+        rb_final = b""
         try:
             rb = await runner.get_repaired_bytes(delivery_id=delivery_id)
             if rb:
+                rb_final = rb
                 _repaired_store[delivery_id] = rb
                 logger.info(
                     "stored repaired bytes for delivery %s (%d bytes)",
@@ -202,7 +253,11 @@ async def upload(file: UploadFile, background_tasks: BackgroundTasks) -> JSONRes
         except Exception as exc:
             logger.warning("could not retrieve repaired_bytes for %s: %s", delivery_id, exc)
 
-    background_tasks.add_task(_run_and_store)
+        _emit_final_event(report, rb_final, delivery_id, language)
+
+    task = asyncio.create_task(_run_and_store())
+    _active_deliveries.add(task)
+    task.add_done_callback(_active_deliveries.discard)
     return JSONResponse({"status": "accepted", "filename": filename, "language": language, "delivery_id": delivery_id})
 
 
@@ -286,9 +341,11 @@ async def break_file(delivery_id: str, background_tasks: BackgroundTasks) -> JSO
             parent_id=delivery_id,
         )
         _delivery_metadata[child_id] = report
+        rb_final = b""
         try:
             rb = await runner.get_repaired_bytes(delivery_id=child_id)
             if rb:
+                rb_final = rb
                 _repaired_store[child_id] = rb
                 logger.info(
                     "stored repaired bytes for broken child delivery %s (%d bytes)",
@@ -297,12 +354,50 @@ async def break_file(delivery_id: str, background_tasks: BackgroundTasks) -> JSO
         except Exception as exc:
             logger.warning("could not retrieve repaired_bytes for child %s: %s", child_id, exc)
 
-    background_tasks.add_task(_run_and_store_child)
+        # we can't reuse _emit_final_event easily because it's a closure in another method, 
+        # let's just copy the logic or call it if we move it to top level. Wait, I'll define it locally.
+        verdict = report.get("verdict", "unknown")
+        if verdict == "passed":
+            bus.emit(DeliveryEvent(
+                event_type=EventType.DELIVERY_PASSED,
+                delivery_id=child_id,
+                language=language,
+                details={
+                    "repairs_applied": report.get("repairs_applied", 0),
+                    "verdict": "passed",
+                    "repaired_file_exists": len(rb_final) > 0,
+                    "parent_id": delivery_id,
+                },
+            ))
+        else:
+            remaining = report.get("violations_found", {}).get("remaining_after_repair", 0)
+            per_rule_breakdown = {}
+            for f in report.get("all_findings", []):
+                rule_name = f.get("rule") or f.get("rule_ref") or "unknown"
+                per_rule_breakdown[rule_name] = per_rule_breakdown.get(rule_name, 0) + 1
+
+            bus.emit(DeliveryEvent(
+                event_type=EventType.DELIVERY_FAILED,
+                delivery_id=child_id,
+                language=language,
+                details={
+                    "verdict": "failed",
+                    "remaining_violations": remaining,
+                    "per_rule_breakdown": per_rule_breakdown,
+                    "repaired_file_exists": len(rb_final) > 0,
+                    "summary": f"{remaining} violation(s) remain after repair",
+                    "parent_id": delivery_id,
+                },
+            ))
+
+    task = asyncio.create_task(_run_and_store_child())
+    _active_deliveries.add(task)
+    task.add_done_callback(_active_deliveries.discard)
 
     return JSONResponse({
         "status": "accepted",
         "child_delivery_id": child_id,
-        "parent_delivery_id": delivery_id,
+        "parent_id": delivery_id,
     })
 
 
@@ -322,7 +417,9 @@ async def briefing(delivery_id: str) -> Response:
     language_findings = report.get("language_findings", [])
 
     try:
-        audio_bytes = _briefing_generator.generate_briefing(report, language_findings)
+        audio_bytes = await asyncio.to_thread(
+            _briefing_generator.generate_briefing, report, language_findings
+        )
         _briefing_cache[delivery_id] = audio_bytes
         return Response(content=audio_bytes, media_type="audio/wav")
     except BriefingError as exc:

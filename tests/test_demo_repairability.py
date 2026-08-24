@@ -81,7 +81,11 @@ async def test_demo_repairability(tmp_path: Path, lang: str, seed: int, meaning_
         "passline.agents.language_checker.LanguageCheckerAgent._get_client",
         return_value=fake_client,
     ), patch(
-        "passline.pipeline.runner.build_coordinator",
+        "passline.agents.language_checker._call_genai_with_retry",
+        new_callable=AsyncMock,
+        return_value=canned,
+    ), patch(
+        "passline.agents.coordinator.build_coordinator",
         side_effect=mock_build_coordinator,
     ), patch(
         "passline.agents.fixer_agent.FixerAgent._propose_language_fix",
@@ -167,7 +171,11 @@ async def test_language_approval_outcomes(tmp_path: Path, action: str) -> None:
         "passline.agents.language_checker.LanguageCheckerAgent._get_client",
         return_value=fake_client,
     ), patch(
-        "passline.pipeline.runner.build_coordinator",
+        "passline.agents.language_checker._call_genai_with_retry",
+        new_callable=AsyncMock,
+        return_value=canned,
+    ), patch(
+        "passline.agents.coordinator.build_coordinator",
         side_effect=mock_build_coordinator,
     ), patch(
         "passline.agents.fixer_agent.FixerAgent._propose_language_fix",

@@ -509,7 +509,7 @@ input[type=file]{display:none}
         <div class="chip" onclick="triggerDemo('demo-en','en-US')">English</div>
         <div class="chip" onclick="triggerDemo('demo-fr','fr-FR')">French</div>
         <div class="chip" onclick="triggerDemo('demo-de','de-DE')">German</div>
-        <div class="chip chip-hazard" style="border: 1px dashed var(--red); color: var(--red); background: rgba(220, 38, 38, 0.05);" onclick="triggerDemo('hopeless','fr-FR')">Hopeless Case</div>
+        <div class="chip chip-hazard" onclick="triggerDemo('hopeless','fr-FR')">Hopeless Case</div>
       </div>
     </div>
 
@@ -691,7 +691,7 @@ const HANDLERS = {
   'qc.violation':       (ev) => { markViolation(ev);             addLog(ev, 'violation'); updateHolds(); },
   'qc.repaired':        (ev) => { markRepaired(ev);              addLog(ev, 'repaired'); updateDiff(ev); },
   'cue.analysis':       (ev) => { renderHeatStrip(ev.details.cues || []); addLog(ev, 'lifecycle'); },
-  'approval.required':  (ev) => { showApproval(ev);              addLog(ev, 'approval'); },
+  'approval.required':  (ev) => { addLog(ev, 'approval'); },
   'delivery.passed':    (ev) => { markCleared(ev);               addLog(ev, 'lifecycle'); updateHolds(); },
   'delivery.failed':    (ev) => { markFailed(ev);               addLog(ev, 'lifecycle'); updateHolds(); },
 };
@@ -742,6 +742,26 @@ function connectSSE() {
   };
 }
 
+// ── Queue Polling ───────────────────────────────────────────────────
+async function checkQueue() {
+  try {
+    const r = await fetch('/api/queue');
+    if (!r.ok) return;
+    const items = await r.json();
+    if (items && items.length > 0) {
+      const pending = items.find(i => i.status === 'pending');
+      if (pending && window._currentApprovalId !== pending.item_id) {
+        showApproval(pending);
+      }
+    } else {
+      const acard = document.getElementById('approval-card');
+      if (acard) acard.classList.remove('active');
+      window._currentApprovalId = null;
+    }
+  } catch(e) {}
+}
+setInterval(checkQueue, 2000);
+
 // ── Polling fallback ─────────────────────────────────────────────────
 function startPolling() {
   if (pollingTimer) return;
@@ -759,8 +779,10 @@ function addDeliveryCard(ev) {
   if (deliveries[ev.delivery_id]) return;
   const d = ev.details || {};
   const el = document.createElement('div');
-  el.className = 'delivery-card pending';
+  const isReplay = ev.delivery_id.startsWith('DEMO-');
+  el.className = 'delivery-card pending' + (isReplay ? ' is-replay' : '');
   el.id = `dc-${CSS.escape(ev.delivery_id)}`;
+  el.setAttribute('data-delivery-id', ev.delivery_id);
   
   let parentLabelHtml = '';
   if (d.parent_id) {
@@ -768,7 +790,7 @@ function addDeliveryCard(ev) {
   }
 
   let replayTagHtml = '';
-  if (ev.delivery_id.startsWith('DEMO-')) {
+  if (isReplay) {
     replayTagHtml = `<span class="mode-indicator replay" style="font-size:9px;padding:1px 5px;margin-left:6px;border-radius:10px;vertical-align:middle;">REPLAY</span>`;
   }
 
@@ -782,7 +804,8 @@ function addDeliveryCard(ev) {
     <div class="progress-bar"><div class="progress-fill" id="prog-${CSS.escape(ev.delivery_id)}"></div></div>
   `;
   document.getElementById('delivery-cards').prepend(el);
-  deliveries[ev.delivery_id] = { violations: 0, repairs: 0, status: 'submitted' };
+  deliveries[ev.delivery_id] = { violations: 0, repairs: 0, status: 'submitted', language: ev.language };
+  updateInFlightState();
 }
 
 function getCard(id)  { return document.getElementById(`dc-${CSS.escape(id)}`); }
@@ -824,11 +847,11 @@ function markCleared(ev) {
   const card  = getCard(ev.delivery_id);
   const badge = getBadge(ev.delivery_id);
   const prog  = getProg(ev.delivery_id);
-  if (card)  { card.className  = 'delivery-card cleared'; }
+  if (card)  { card.className  = card.className.replace('pending', '').replace('repairing', '').replace('hold', '') + ' cleared'; }
   if (badge) { badge.className = 'status-badge badge-cleared'; badge.textContent = 'CLEARED FOR DELIVERY'; }
   if (prog)  { prog.style.width = '100%'; prog.style.background = 'var(--green)'; }
   // Append a download link for the repaired SRT file if repaired_file_exists is true
-  if (card && ev.details && ev.details.repaired_file_exists === true) {
+  if (card && ev.details && ev.details.repaired_file_exists === true && !card.classList.contains('is-replay')) {
     const existing = card.querySelector('.download-link');
     if (!existing) {
       const link = document.createElement('a');
@@ -840,18 +863,18 @@ function markCleared(ev) {
     }
   }
   // Append Briefing button if enabled
-  if (card) {
+  if (card && !card.classList.contains('is-replay')) {
     const existingBriefing = card.querySelector('.briefing-btn');
     if (!existingBriefing) {
       const bbtn = document.createElement('button');
       bbtn.className = 'briefing-btn';
       bbtn.onclick = () => playBriefing(ev.delivery_id);
       bbtn.textContent = '▶ Briefing';
-      bbtn.style.cssText = 'display:inline-block;margin-top:6px;margin-left:12px;font-size:10px;padding:2px 6px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#fff;cursor:pointer;border-radius:4px;';
       card.appendChild(bbtn);
     }
   }
   updateBreakButtonState();
+  updateInFlightState();
 }
 
 function markFailed(ev) {
@@ -861,7 +884,7 @@ function markFailed(ev) {
   const card  = getCard(ev.delivery_id);
   const badge = getBadge(ev.delivery_id);
   const prog  = getProg(ev.delivery_id);
-  if (card)  { card.className  = 'delivery-card failed'; }
+  if (card)  { card.className  = card.className.replace('pending', '').replace('repairing', '').replace('hold', '') + ' failed'; }
   if (badge) {
     badge.className = 'status-badge badge-failed';
     const remains = ev.details.remaining_violations || s.violations || 0;
@@ -869,13 +892,24 @@ function markFailed(ev) {
   }
   if (prog)  { prog.style.width = '100%'; prog.style.background = 'var(--amber)'; }
 
-  if (card) {
+  if (card && !card.querySelector('.violations-breakdown')) {
     // Render per-rule breakdown
     const breakdown = ev.details.per_rule_breakdown || {};
-    let bdHtml = '<div style="margin-top:6px;font-size:10px;color:var(--amber-dim);">';
-    bdHtml += '<strong>Violations Breakdown:</strong><ul style="margin:2px 0 0 10px;padding:0;list-style:disc;">';
+    let bdHtml = '<div class="violations-breakdown" style="margin-top:6px;font-size:12px;color:var(--text);">';
+    bdHtml += '<strong>Violations Breakdown:</strong><ul style="margin:2px 0 0 14px;padding:0;list-style:disc;">';
+    
+    const ruleNames = {
+      'cps_exceeded': 'Reading speed exceeded',
+      'cps_warning': 'Reading speed warning',
+      'line_too_long': 'Line length limit exceeded',
+      'three_line_cue': 'Cue has too many lines',
+      'sub_one_second': 'Duration too short',
+      'overlap': 'Cue overlap',
+    };
+    
     Object.entries(breakdown).forEach(([rule, count]) => {
-      bdHtml += `<li>${esc(rule)}: ${count}</li>`;
+      const plainRule = ruleNames[rule] || (rule.startsWith('MT') ? 'Language or meaning error' : rule);
+      bdHtml += `<li>${esc(plainRule)}: ${count}</li>`;
     });
     bdHtml += '</ul></div>';
     
@@ -884,7 +918,7 @@ function markFailed(ev) {
     card.appendChild(bdDiv);
 
     // Conditionally show best-effort download link
-    if (ev.details && ev.details.repaired_file_exists === true) {
+    if (ev.details && ev.details.repaired_file_exists === true && !card.classList.contains('is-replay')) {
       const existing = card.querySelector('.download-link');
       if (!existing) {
         const link = document.createElement('a');
@@ -897,23 +931,59 @@ function markFailed(ev) {
     }
 
     // Append Briefing button if enabled
-    const existingBriefing = card.querySelector('.briefing-btn');
-    if (!existingBriefing) {
-      const bbtn = document.createElement('button');
-      bbtn.className = 'briefing-btn';
-      bbtn.onclick = () => playBriefing(ev.delivery_id);
-      bbtn.textContent = '▶ Briefing';
-      bbtn.style.cssText = 'display:inline-block;margin-top:6px;margin-left:12px;font-size:10px;padding:2px 6px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#fff;cursor:pointer;border-radius:4px;';
-      card.appendChild(bbtn);
+    if (!card.classList.contains('is-replay')) {
+      const existingBriefing = card.querySelector('.briefing-btn');
+      if (!existingBriefing) {
+        const bbtn = document.createElement('button');
+        bbtn.className = 'briefing-btn';
+        bbtn.onclick = () => playBriefing(ev.delivery_id);
+        bbtn.textContent = '▶ Briefing';
+        card.appendChild(bbtn);
+      }
     }
   }
   updateBreakButtonState();
+  updateInFlightState();
+}
+
+function updateInFlightState() {
+  const inFlight = Object.values(deliveries).filter(d => ['submitted', 'repairing', 'hold'].includes(d.status)).length > 0;
+  const demoBtns = document.querySelectorAll('.demo-btn');
+  const dz = document.getElementById('dropzone');
+  
+  if (inFlight) {
+    demoBtns.forEach(btn => {
+      btn.disabled = true;
+      btn.title = "A delivery is currently in flight";
+    });
+    if (dz) {
+      dz.style.pointerEvents = 'none';
+      dz.style.opacity = '0.5';
+      const dzLabel = dz.querySelector('.dropzone-label');
+      if (dzLabel && !dzLabel.dataset.orig) dzLabel.dataset.orig = dzLabel.textContent;
+      if (dzLabel) dzLabel.textContent = "Pipeline busy...";
+    }
+  } else {
+    demoBtns.forEach(btn => {
+      btn.disabled = false;
+      btn.title = "";
+    });
+    if (dz) {
+      dz.style.pointerEvents = 'auto';
+      dz.style.opacity = '1';
+      const dzLabel = dz.querySelector('.dropzone-label');
+      if (dzLabel && dzLabel.dataset.orig) {
+        dzLabel.textContent = dzLabel.dataset.orig;
+        delete dzLabel.dataset.orig;
+      }
+    }
+  }
 }
 
 function updateBreakButtonState() {
   const btn = document.getElementById('break-btn');
   if (!btn) return;
-  const clearedCards = document.querySelectorAll('.delivery-card.cleared');
+  const clearedCards = document.querySelectorAll('.delivery-card.cleared:not(.is-replay)');
   if (clearedCards.length > 0) {
     btn.disabled = false;
     btn.title = 'Break the most recently cleared delivery';
@@ -935,8 +1005,8 @@ async function playBriefing(deliveryId) {
     const resp = await fetch(`/api/briefing/${encodeURIComponent(deliveryId)}`);
     if (!resp.ok) {
       if (bbtn) {
-        bbtn.textContent = 'Briefing unavailable';
-        bbtn.disabled = true;
+        bbtn.textContent = 'Briefing failed - Try again';
+        bbtn.disabled = false;
       }
       return;
     }
@@ -952,10 +1022,9 @@ async function playBriefing(deliveryId) {
     };
     await audio.play();
   } catch (e) {
-    console.warn('playBriefing failed', e);
     if (bbtn) {
-      bbtn.textContent = 'Briefing unavailable';
-      bbtn.disabled = true;
+      bbtn.textContent = 'Briefing failed - Try again';
+      bbtn.disabled = false;
     }
   }
 }
@@ -1032,13 +1101,15 @@ const LOG_TYPES = {
   'qc.repaired':        ['repaired',  'REPAIRED  '],
   'cue.analysis':       ['lifecycle', 'ANALYSIS  '],
   'approval.required':  ['approval',  'APPROVAL  '],
+  'approval.timeout':   ['approval',  'TIMEOUT   '],
   'delivery.passed':    ['lifecycle', 'CLEARED   '],
-  'delivery.failed':    ['lifecycle', 'HELD      '],
+  'delivery.failed':    ['violation', 'HELD      '],
 };
 
 function addLog(ev, cls) {
   const feed = document.getElementById('log-feed');
-  const ts   = new Date(ev.timestamp).toISOString().substr(11, 12);
+  const d = new Date(ev.timestamp);
+  const ts = d.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute:'2-digit', second:'2-digit' }) + '.' + String(d.getMilliseconds()).padStart(3, '0');
   const [, typeLabel] = LOG_TYPES[ev.event_type] || ['station', ev.event_type.padEnd(9)];
   const detail = buildLogDetail(ev);
 
@@ -1088,10 +1159,22 @@ function buildLogDetail(ev) {
     case 'subtitle.submitted': return `${ev.delivery_id}  ${ev.language}  ${d.cue_count || '?'} cues`;
     case 'station.working':    return `${d.station_name || d.station_id}  →  working`;
     case 'station.ready':      return `${d.station_name || d.station_id}  →  ready`;
-    case 'qc.violation':       return `cue#${d.cue}  ${d.rule}  val=${d.value}  limit=${d.threshold}`;
+    case 'qc.violation': {
+      if (d.rule && d.rule.startsWith('MT')) return `cue#${d.cue}  ${d.rule}`;
+      let val = d.value;
+      let limit = d.threshold;
+      if (typeof val === 'number') val = val.toFixed(2);
+      if (typeof limit === 'number') limit = limit.toFixed(2);
+      let unit = '';
+      if (d.rule && d.rule.includes('cps')) unit = ' cps';
+      else if (d.rule === 'line_too_long') unit = ' chars';
+      else if (d.rule === 'sub_one_second') unit = ' ms';
+      return `cue#${d.cue}  ${d.rule}  val=${val}${unit}  limit=${limit}${unit}`;
+    }
     case 'qc.repaired':        return `cue#${d.cue}  ${d.rule}  repaired`;
     case 'cue.analysis':       return `${(d.cues||[]).length} cues analysed`;
     case 'approval.required':  return `${d.reason || 'review required'}`;
+    case 'approval.timeout':   return `No human decision was made`;
     case 'delivery.passed':    return `${ev.delivery_id}  CLEARED  ${d.note || ''}`;
     case 'delivery.failed':    return `${ev.delivery_id}  HELD — ${d.remaining_violations || '?'} violation(s) remain`;
     default:                   return `${ev.delivery_id}`;
@@ -1108,44 +1191,86 @@ function updateDiff(ev) {
 }
 
 // ── Approval card ────────────────────────────────────────────────────
-function showApproval(ev) {
+async function showApproval(item) {
   const card = document.getElementById('approval-card');
   const sub  = document.getElementById('approval-sub');
   card.classList.add('active');
-  const d = ev.details || {};
-  sub.textContent = d.reason || 'Human review required before delivery.';
-  window._currentApprovalId = d.item_id || null;
+  window._currentApprovalId = item.item_id;
+  window._currentApprovalDeliveryId = item.delivery_id;
 
-  if (ev.delivery_id) {
-    const dc = getCard(ev.delivery_id);
-    if (dc) {
-      dc.classList.add('waiting');
-    }
-    window._currentApprovalDeliveryId = ev.delivery_id;
+  let styleGuideHtml = '';
+  if (item.rule_ref) {
+    try {
+      // Find the language of the delivery from metadata if we can
+      const dc = deliveries[item.delivery_id];
+      const lang = dc ? dc.language : 'en';
+      const sg = await fetch(`/api/style-guide/${encodeURIComponent(item.rule_ref)}/${encodeURIComponent(lang)}`);
+      if (sg.ok) {
+        const sgData = await sg.json();
+        if (sgData.citation) {
+          styleGuideHtml = `<div style="color:var(--text);margin-top:6px;font-style:italic;">"${esc(sgData.citation)}"</div>`;
+        }
+      }
+    } catch(e) {}
+  }
+
+  const confPct = Math.round((item.confidence || 0) * 100);
+
+  sub.innerHTML = `
+    <div style="font-family:var(--mono);color:var(--text-dim);margin-bottom:8px;">
+      Delivery ${esc(item.delivery_id)} · Cue ${item.cue_index}
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px;font-family:var(--mono);">
+      <div style="color:var(--amber);">BEFORE:<br/>${esc(item.original_text || '')}</div>
+      <div style="color:var(--green);">AFTER:<br/>${esc(item.proposed_text || '')}</div>
+    </div>
+    <div style="margin-bottom:6px;">
+      <span style="color:var(--amber);">${esc(item.rule_ref || 'Unknown')}</span> · ${confPct}% Confidence
+    </div>
+    ${styleGuideHtml}
+    <div style="color:var(--text);margin-top:8px;">
+      Reason: ${esc(item.explanation || item.reason || '')}
+    </div>
+  `;
+
+  if (item.delivery_id) {
+    const dc = getCard(item.delivery_id);
+    if (dc) dc.classList.add('waiting');
   }
 }
 
-function handleApproval(action) {
+async function handleApproval(action) {
   const card = document.getElementById('approval-card');
   const sub  = document.getElementById('approval-sub');
+  const itemId = window._currentApprovalId;
+  const deliveryId = window._currentApprovalDeliveryId;
+
+  if (itemId) {
+    sub.textContent = '⏳ Sending decision...';
+    try {
+      const resp = await fetch('/api/queue/' + itemId + '/' + action, {method:'POST'});
+      if (!resp.ok) {
+        sub.textContent = '❌ Server rejected the decision. Try again.';
+        return;
+      }
+    } catch(err) {
+      sub.textContent = '❌ Network error submitting decision. Try again.';
+      return;
+    }
+    window._currentApprovalId = null;
+  }
+
   card.classList.remove('active');
   sub.textContent = action === 'approve'
     ? '✓ Approved — delivery authorized.'
     : '✗ Rejected — delivery blocked.';
-  const itemId = window._currentApprovalId;
 
-  if (window._currentApprovalDeliveryId) {
-    const dc = getCard(window._currentApprovalDeliveryId);
+  if (deliveryId) {
+    const dc = getCard(deliveryId);
     if (dc) {
       dc.classList.remove('waiting');
     }
     window._currentApprovalDeliveryId = null;
-  }
-
-  if (itemId) {
-    fetch('/api/queue/' + itemId + '/' + action, {method:'POST'})
-      .catch(err => console.warn('approval API call failed', err));
-    window._currentApprovalId = null;
   }
 }
 
@@ -1218,10 +1343,13 @@ async function startReset() {
   
   // 9. Delivery window countdown
   countdownS = 14400;
+  const cdEl = document.getElementById('countdown');
+  if (cdEl) cdEl.style.color = '';
   
   // 10. Mode indicator and break button state
   updateModeIndicator(false);
   updateBreakButtonState();
+  updateInFlightState();
 }
 
 function toggleLoop() {
@@ -1253,10 +1381,10 @@ async function triggerDemo(id, lang) {
 }
 
 async function triggerBreak() {
-  const clearedCards = document.querySelectorAll('.delivery-card.cleared');
+  const clearedCards = document.querySelectorAll('.delivery-card.cleared:not(.is-replay)');
   if (clearedCards.length === 0) return;
   const card = clearedCards[0];
-  const deliveryId = card.id.replace('dc-', '');
+  const deliveryId = card.getAttribute('data-delivery-id');
 
   const btn = document.getElementById('break-btn');
   if (btn) btn.disabled = true;
@@ -1264,15 +1392,17 @@ async function triggerBreak() {
   try {
     const resp = await fetch(`/api/break/${encodeURIComponent(deliveryId)}`, {method: 'POST'});
     if (!resp.ok) {
-      console.warn('break action failed', resp.status);
+      if (btn) btn.textContent = 'Break Failed';
+      setTimeout(() => { if (btn) btn.textContent = '⚡ BREAK THIS FILE'; }, 3000);
     } else {
       const data = await resp.json();
       console.log('break pipeline started', data);
     }
   } catch (e) {
-    console.warn('triggerBreak error', e);
+    if (btn) btn.textContent = 'Break Failed';
+    setTimeout(() => { if (btn) btn.textContent = '⚡ BREAK THIS FILE'; }, 3000);
   } finally {
-    updateBreakButtonState();
+    setTimeout(updateBreakButtonState, 3000);
   }
 }
 
@@ -1293,6 +1423,12 @@ dz.addEventListener('drop', (e) => {
 
 function handleFile(file) {
   const label = dz.querySelector('.dropzone-label');
+  if (!file.name.toLowerCase().endsWith('.srt')) {
+    label.textContent = `❌ Unsupported format: ${file.name}`;
+    label.style.color = "var(--amber)";
+    return;
+  }
+  label.style.color = "";
   label.textContent = `▶ ${file.name}`;
   const fd = new FormData();
   fd.append('file', file);

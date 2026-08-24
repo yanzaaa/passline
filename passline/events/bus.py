@@ -43,6 +43,7 @@ class EventType(str, Enum):
     STATION_READY = "station.ready"
     CUE_ANALYSIS = "cue.analysis"
     APPROVAL_REQUIRED = "approval.required"
+    APPROVAL_TIMEOUT = "approval.timeout"
 
     # ── Schema 1.3 — honest-fail events ──────────────────────────────────────
     DELIVERY_FAILED = "delivery.failed"

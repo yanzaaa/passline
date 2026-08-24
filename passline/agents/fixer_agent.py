@@ -34,6 +34,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 import os
+import asyncio
 from typing import Any, AsyncGenerator
 
 from pydantic import ConfigDict
@@ -226,9 +227,11 @@ class FixerAgent(LlmAgent):
         resolved_language_findings: list[dict] = []
         unresolved_findings: list[dict] = []
 
+        attempted_language_fixes = {(r.get("cue_index"), r.get("rule_ref") or r.get("rule")) for r in repair_log if r.get("type") == "language"}
+
+        language_tasks = []
         for finding in all_findings_dicts:
             rule = finding.get("rule", "")
-
             if rule in _DETERMINISTIC_RULES:
                 # ── Deterministic repair ──────────────────────────────────
                 cue_index = finding["cue_index"]
@@ -258,75 +261,108 @@ class FixerAgent(LlmAgent):
                         },
                     ))
                 unresolved_findings.append(finding)
-
             else:
                 # ── Language-level repair via LLM ─────────────────────────
-                # (rule from language checker, e.g. MT01–MT06)
                 cue_index = finding.get("cue_index", 0)
+                rule_ref = finding.get("rule_ref") or finding.get("rule", "Unknown")
+                
+                # Do not re-propose if already attempted
+                if (cue_index, rule_ref) in attempted_language_fixes:
+                    unresolved_findings.append(finding)
+                    continue
+
                 cue = next((c for c in cues if c.index == cue_index), None)
                 if cue is None:
+                    unresolved_findings.append(finding)
                     continue
 
                 original_text = "\n".join(cue.lines)
-
-                # Ask the LLM for a suggestion (simple text prompt)
-                # We do this by temporarily updating the instruction and
-                # calling the parent LlmAgent with a focused prompt.
-                # For simplicity: use the explanation as guidance.
                 explanation = finding.get("explanation", "Language quality issue")
-                rule_ref = finding.get("rule_ref") or finding.get("rule", "Unknown")
-                proposed_text = await self._propose_language_fix(
-                    original_text, explanation, language
+                
+                async def _get_proposal(f, o_text, expl, r_ref):
+                    prop = await self._propose_language_fix(o_text, expl, language)
+                    return (f, o_text, prop, expl, r_ref)
+
+                language_tasks.append(_get_proposal(finding, original_text, explanation, rule_ref))
+
+        # Wait for all language proposals concurrently
+        proposals = []
+        if language_tasks:
+            proposals = await asyncio.gather(*language_tasks)
+
+        # Enqueue all valid meaning-changing edits
+        pending_items = []
+        for finding, original_text, proposed_text, explanation, rule_ref in proposals:
+            if proposed_text and proposed_text.strip() != original_text.strip():
+                item = self.approval_queue.make_item(
+                    delivery_id=delivery_id,
+                    cue_index=finding.get("cue_index", 0),
+                    original_text=original_text,
+                    proposed_text=proposed_text,
+                    reason=explanation,
+                    rule_ref=rule_ref,
+                    confidence=finding.get("confidence", 0.0),
+                    explanation=explanation,
                 )
+                self.approval_queue.enqueue(item)
+                pending_items.append((item, finding, original_text, proposed_text, rule_ref))
+            else:
+                unresolved_findings.append(finding)
 
-                if proposed_text and proposed_text.strip() != original_text.strip():
-                    # Meaning-changing edit — enqueue for human approval
-                    item = self.approval_queue.make_item(
-                        delivery_id=delivery_id,
-                        cue_index=cue_index,
-                        original_text=original_text,
-                        proposed_text=proposed_text,
-                        reason=f"[{rule_ref}] {explanation}",
-                    )
-                    self.approval_queue.enqueue(item)
-                    # Suspend loop until human decides
-                    decision = await self.approval_queue.await_decision(item.item_id)
+        # Await decisions sequentially (human responds one by one)
+        for item, finding, original_text, proposed_text, rule_ref in pending_items:
+            cue_index = finding.get("cue_index", 0)
+            rule = finding.get("rule", "")
+            try:
+                decision = await asyncio.wait_for(
+                    self.approval_queue.await_decision(item.item_id),
+                    timeout=5.0
+                )
+            except asyncio.TimeoutError:
+                decision = "timeout"
+                self.approval_queue.reject(item.item_id)
+                self.bus.emit(DeliveryEvent(
+                    event_type=EventType.APPROVAL_TIMEOUT,
+                    delivery_id=delivery_id,
+                    language=language,
+                    details={"reason": "No human decision was made"}
+                ))
 
-                    if decision == "approved":
-                        new_lines = proposed_text.split("\n")
-                        idx = next((i for i, c in enumerate(cues) if c.index == cue_index), None)
-                        if idx is not None:
-                            cues[idx] = cues[idx].model_copy(update={"lines": new_lines})
-                        repair_entry = {
-                            "rule": rule,
-                            "rule_ref": rule_ref,
-                            "cue": cue_index,
-                            "cue_index": cue_index,
-                            "type": "language",
-                            "approved": True,
-                            "original": original_text,
-                            "repaired": proposed_text,
-                        }
-                        repair_log.append(repair_entry)
-                        self.bus.emit(DeliveryEvent(
-                            event_type=EventType.QC_REPAIRED,
-                            delivery_id=delivery_id,
-                            language=language,
-                            details=repair_entry,
-                        ))
-                        resolved_language_findings.append(finding)
-                    else:
-                        repair_log.append({
-                            "rule": rule,
-                            "cue_index": cue_index,
-                            "type": "language",
-                            "approved": False,
-                            "original": original_text,
-                            "proposed": proposed_text,
-                        })
-                        unresolved_findings.append(finding)
-                else:
-                    unresolved_findings.append(finding)
+            if decision == "approved":
+                new_lines = proposed_text.split("\n")
+                idx = next((i for i, c in enumerate(cues) if c.index == cue_index), None)
+                if idx is not None:
+                    cues[idx] = cues[idx].model_copy(update={"lines": new_lines})
+                repair_entry = {
+                    "rule": rule,
+                    "rule_ref": rule_ref,
+                    "cue": cue_index,
+                    "cue_index": cue_index,
+                    "type": "language",
+                    "approved": True,
+                    "original": original_text,
+                    "repaired": proposed_text,
+                }
+                repair_log.append(repair_entry)
+                self.bus.emit(DeliveryEvent(
+                    event_type=EventType.QC_REPAIRED,
+                    delivery_id=delivery_id,
+                    language=language,
+                    details=repair_entry,
+                ))
+                resolved_language_findings.append(finding)
+            else:
+                repair_log.append({
+                    "rule": rule,
+                    "rule_ref": rule_ref,
+                    "cue_index": cue_index,
+                    "type": "language",
+                    "approved": False,
+                    "status": decision,
+                    "original": original_text,
+                    "proposed": proposed_text,
+                })
+                unresolved_findings.append(finding)
 
         # Rebuild the SubtitleFile with repaired cues
         repaired_file = subtitle_file.model_copy(update={"cues": cues})

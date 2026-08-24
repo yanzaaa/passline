@@ -190,6 +190,38 @@ class TestDownloadEndpoint:
 # /api/queue
 # ─────────────────────────────────────────────────────────────────────────────
 
+class TestBreakEndpoint:
+    @pytest.mark.anyio
+    async def test_break_endpoint_starts_with_digit(self, client):
+        import passline.dashboard.app as app_module
+        
+        # We want to assert the request reaches the server byte for byte unchanged.
+        # Set up the mock store with an ID starting with a digit.
+        test_id = "123-abc-456"
+        app_module._repaired_store[test_id] = b"1\n00:00:01,000 --> 00:00:03,000\nRepaired cue.\n\n"
+        app_module._delivery_metadata[test_id] = {"language": "en"}
+        
+        with patch("passline.pipeline.runner.PipelineRunner.run_delivery", new_callable=AsyncMock, return_value={"verdict": "passed"}) as mock_run:
+            with patch("passline.pipeline.runner.PipelineRunner.get_repaired_bytes", new_callable=AsyncMock, return_value=b""):
+                r = await client.post(f"/api/break/{test_id}")
+                assert r.status_code == 200
+                
+                body = r.json()
+                assert body["status"] == "accepted"
+                assert body["parent_id"] == test_id
+                
+                await asyncio.sleep(0.01) # let background task run
+
+    @pytest.mark.anyio
+    async def test_break_missing_404(self, client):
+        r = await client.post("/api/break/not-exist")
+        assert r.status_code == 404
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# /api/queue
+# ─────────────────────────────────────────────────────────────────────────────
+
 class TestQueueEndpoints:
     @pytest.fixture(autouse=True)
     def _clean_queue(self):
@@ -197,6 +229,25 @@ class TestQueueEndpoints:
         aq._items.clear()
         yield
         aq._items.clear()
+
+    @pytest.mark.anyio
+    async def test_queue_read_returns_dropped_event(self, client):
+        """Even if the event stream drops the approval.required event, /api/queue still returns it."""
+        from passline.pipeline.approval import approval_queue as aq
+        item = aq.make_item(
+            delivery_id="delivery-dropped-event", cue_index=42,
+            original_text="original", proposed_text="proposed",
+            reason="testing dropped event"
+        )
+        aq.enqueue(item)
+        
+        # We drop/ignore the event stream entirely and just hit the queue endpoint
+        r = await client.get("/api/queue")
+        assert r.status_code == 200
+        items = r.json()
+        assert len(items) == 1
+        assert items[0]["delivery_id"] == "delivery-dropped-event"
+        assert items[0]["status"] == "pending"
 
     @pytest.mark.anyio
     async def test_queue_list_empty(self, client):

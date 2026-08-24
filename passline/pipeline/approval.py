@@ -38,6 +38,9 @@ class ApprovalItem:
     proposed_text: str
     reason: str
     status: Literal["pending", "approved", "rejected"] = "pending"
+    rule_ref: str = ""
+    confidence: float = 0.0
+    explanation: str = ""
 
     def to_dict(self) -> dict:
         return dataclasses.asdict(self)
@@ -158,6 +161,9 @@ class ApprovalQueue:
         original_text: str,
         proposed_text: str,
         reason: str,
+        rule_ref: str = "",
+        confidence: float = 0.0,
+        explanation: str = "",
     ) -> ApprovalItem:
         """Convenience factory that auto-generates a UUID item_id."""
         return ApprovalItem(
@@ -167,6 +173,9 @@ class ApprovalQueue:
             original_text=original_text,
             proposed_text=proposed_text,
             reason=reason,
+            rule_ref=rule_ref,
+            confidence=confidence,
+            explanation=explanation,
         )
 
 

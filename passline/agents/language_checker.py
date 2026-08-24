@@ -234,21 +234,53 @@ class LanguageCheckerAgent(BaseAgent):
             return
 
         subtitle_file = SubtitleFile.model_validate(subtitle_file_dict)
-        prompt = _build_prompt(subtitle_file)
-        model_name = os.getenv("PASSLINE_LANG_MODEL", _DEFAULT_LANG_MODEL)
+        is_demo = ctx.session.state.get("is_demo", False)
         client = self._get_client()
 
-        output: LanguageCheckerOutput | None = None
-        try:
-            output = await _call_genai_with_retry(client, model_name, prompt, language)
-        except Exception as exc:
-            log.warning("LanguageCheckerAgent: LLM call failed — %s", exc)
-            output = LanguageCheckerOutput(flags=[], language=language, checked_cues=0)
+        output_flags: list[LanguageFlag] = []
+        checked_cues = len(subtitle_file.cues)
 
-        flags = output.flags if output else []
+        if is_demo:
+            model_name = "gemini-2.5-flash"
+            # Split cues into smaller batches (e.g. 5 cues per request) to reduce latency
+            batch_size = 5
+            batches = [subtitle_file.cues[i:i + batch_size] for i in range(0, checked_cues, batch_size)]
 
-        # Emit one QC_VIOLATION per flag
-        for flag in flags:
+            import asyncio
+            async def process_batch(cues_batch):
+                batch_file = SubtitleFile(cues=cues_batch)
+                batch_prompt = _build_prompt(batch_file)
+                try:
+                    res = await _call_genai_with_retry(client, model_name, batch_prompt, language)
+                    return res.flags if res else []
+                except Exception as exc:
+                    log.warning("LanguageCheckerAgent batch failed: %s", exc)
+                    return []
+
+            tasks = [process_batch(b) for b in batches]
+            completed = 0
+            for coro in asyncio.as_completed(tasks):
+                res_flags = await coro
+                output_flags.extend(res_flags)
+                completed += 1
+                # Report progress
+                self.bus.emit(DeliveryEvent(
+                    event_type=EventType.STATION_WORKING,
+                    delivery_id=delivery_id,
+                    language=language,
+                    details={"station_id": _STATION_ID, "station_name": _STATION_NAME, "progress": f"{completed}/{len(batches)} batches"}
+                ))
+        else:
+            model_name = os.getenv("PASSLINE_LANG_MODEL", _DEFAULT_LANG_MODEL)
+            prompt = _build_prompt(subtitle_file)
+            try:
+                output = await _call_genai_with_retry(client, model_name, prompt, language)
+                output_flags = output.flags if output else []
+            except Exception as exc:
+                log.warning("LanguageCheckerAgent: LLM call failed — %s", exc)
+
+        findings: list[dict] = []
+        for flag in output_flags:
             self.bus.emit(DeliveryEvent(
                 event_type=EventType.QC_VIOLATION,
                 delivery_id=delivery_id,
@@ -273,16 +305,16 @@ class LanguageCheckerAgent(BaseAgent):
             details={
                 "station_id": _STATION_ID,
                 "station_name": _STATION_NAME,
-                "findings": len(flags),
+                "findings": len(output_flags),
             },
         ))
 
-        log.debug("LanguageCheckerAgent: %d language findings", len(flags))
+        log.debug("LanguageCheckerAgent: %d language findings", len(output_flags))
 
         yield Event(
             author=self.name,
             actions=EventActions(state_delta={
-                STATE_LANGUAGE_FINDINGS: [f.model_dump() for f in flags],
+                STATE_LANGUAGE_FINDINGS: [f.model_dump() for f in output_flags],
             }),
         )
 
