@@ -32,7 +32,7 @@ _BOM = b"\xef\xbb\xbf"
 # Timecode pattern.  We capture both halves independently so we can detect
 # non-canonical formatting (single-digit hours, extra spaces around -->) later.
 _TIMECODE_RE = re.compile(
-    r"^(\d{1,2}):(\d{2}):(\d{2}),(\d{3})\s*-->\s*(\d{1,2}):(\d{2}):(\d{2}),(\d{3})"
+    r"^(\d{1,2}):(\d{2}):(\d{2})(?:,(\d{3}))?\s*-+>\s*(\d{1,2}):(\d{2}):(\d{2})(?:,(\d{3}))?"
 )
 
 # Pattern for a *canonical* timecode line: exactly two-digit hours, single space
@@ -57,8 +57,10 @@ def _parse_timecode_line(tc_line: str) -> tuple[int, int]:
     m = _TIMECODE_RE.match(tc_line)
     if m is None:
         raise ValueError(f"Invalid SRT timecode line: {tc_line!r}")
-    start = int(m[1]) * 3_600_000 + int(m[2]) * 60_000 + int(m[3]) * 1_000 + int(m[4])
-    end   = int(m[5]) * 3_600_000 + int(m[6]) * 60_000 + int(m[7]) * 1_000 + int(m[8])
+    ms_start = int(m[4]) if m[4] else 0
+    ms_end = int(m[8]) if m[8] else 0
+    start = int(m[1]) * 3_600_000 + int(m[2]) * 60_000 + int(m[3]) * 1_000 + ms_start
+    end   = int(m[5]) * 3_600_000 + int(m[6]) * 60_000 + int(m[7]) * 1_000 + ms_end
     return start, end
 
 
@@ -160,6 +162,23 @@ def parse_srt(
     if "\r\n" in text:
         text = text.replace("\r\n", "\n")
 
+    # The Chinese subtitle file has a peculiar format where there are blank lines
+    # *within* a cue block (e.g. between the index, timecode, and text).
+    # We can detect this if we see a number followed by double newline followed by timecode,
+    # or timecode followed by double newline followed by text.
+    # To fix this broadly before splitting, we normalize the block separation.
+    # A true block boundary is usually defined by an empty line BEFORE a cue index (or timecode).
+    # Since this is a mess, let's just use regex to find actual blocks:
+    # An optional index, followed by timecode, followed by text.
+    
+    # Actually, a simpler normalisation: if a line is just an index, and the next is a timecode, 
+    # but separated by \n\n, we collapse them.
+    text = re.sub(r"^(\d+)\n\n(\d{1,2}:\d{2}:\d{2})", r"\1\n\2", text, flags=re.MULTILINE)
+    text = re.sub(r"(\d{1,2}:\d{2}:\d{2}(?:,\d{3})?\s*-+>\s*\d{1,2}:\d{2}:\d{2}(?:,\d{3})?)\n\n", r"\1\n", text)
+    # Also collapse double newlines within text lines (before the next empty block divider).
+    # This is complex with regex. Let's just say if the line has no digits and isn't a timecode, it's text.
+    text = re.sub(r"([^\n])\n\n([^\n0-9])", r"\1\n\2", text)
+    
     # ── 4. Detect trailing blank line ─────────────────────────────────────────
     trailing_blank = text.endswith("\n\n")
 
@@ -182,34 +201,49 @@ def parse_srt(
     for block in blocks:
         block_lines = block.split("\n")
 
-        if len(block_lines) < 3:
+        if len(block_lines) < 2:
             anomalies.append(
-                f"Skipped block with fewer than 3 lines: {block_lines[0]!r}"
+                f"Skipped block with fewer than 2 lines: {block_lines[0]!r}"
             )
             skipped += 1
             continue
 
-        # Index line
+        # Try parsing first line as timecode to catch omitted index
         try:
-            index = int(block_lines[0].strip())
+            start_ms, end_ms = _parse_timecode_line(block_lines[0])
+            # It's a timecode line! The index was omitted.
+            index = len(cues) + 1
+            tc_line = block_lines[0]
+            text_lines = block_lines[1:]
+            anomalies.append(f"Cue {index}: missing index number — auto-assigned")
         except ValueError:
-            anomalies.append(
-                f"Skipped block: non-integer index line {block_lines[0]!r}"
-            )
-            skipped += 1
-            continue
+            # Normal case: first line is index
+            try:
+                index = int(block_lines[0].strip())
+            except ValueError:
+                anomalies.append(
+                    f"Skipped block: non-integer index line {block_lines[0]!r}"
+                )
+                skipped += 1
+                continue
 
-        # Timecode line
-        tc_line = block_lines[1]
-        try:
-            start_ms, end_ms = _parse_timecode_line(tc_line)
-        except ValueError:
-            anomalies.append(
-                f"Skipped cue {index}: invalid timecode {tc_line!r}"
-            )
-            skipped += 1
-            continue
+            # Timecode line
+            if len(block_lines) < 3:
+                anomalies.append(f"Skipped cue {index}: no text lines")
+                skipped += 1
+                continue
 
+            tc_line = block_lines[1]
+            try:
+                start_ms, end_ms = _parse_timecode_line(tc_line)
+            except ValueError:
+                anomalies.append(
+                    f"Skipped cue {index}: invalid timecode {tc_line!r}"
+                )
+                skipped += 1
+                continue
+            text_lines = block_lines[2:]
+            
         # Check for non-canonical timecode format
         if not _CANONICAL_TC_RE.match(tc_line):
             anomalies.append(
@@ -217,7 +251,6 @@ def parse_srt(
                 f"normalised to {_ms_to_timecode(start_ms)} --> {_ms_to_timecode(end_ms)}"
             )
 
-        text_lines = block_lines[2:]
         if not text_lines:
             anomalies.append(f"Skipped cue {index}: no text lines")
             skipped += 1

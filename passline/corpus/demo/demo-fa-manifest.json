@@ -1,20 +1,10 @@
 {
   "schema_version": "1.0",
   "corpus_version": "1",
-  "language": "en",
-  "source_file": "tests/corpus/clean/tos-en.srt",
-  "seed": 7,
+  "language": "fa",
+  "source_file": "tests/corpus/clean/tos-fa.srt",
+  "seed": 31,
   "defects": [
-    {
-      "cue_index": 2,
-      "defect_type": "auto-detected",
-      "rule": "cps_exceeded",
-      "threshold": 20.0,
-      "measured_value": 107.5,
-      "severity": "ERROR",
-      "category": "rule",
-      "detail": "Rule cps_exceeded triggered"
-    },
     {
       "cue_index": 2,
       "defect_type": "auto-detected",
@@ -26,21 +16,11 @@
       "detail": "Rule line_too_long triggered"
     },
     {
-      "cue_index": 2,
-      "defect_type": "auto-detected",
-      "rule": "sub_one_second",
-      "threshold": 1000.0,
-      "measured_value": 400.0,
-      "severity": "ERROR",
-      "category": "rule",
-      "detail": "Rule sub_one_second triggered"
-    },
-    {
       "cue_index": 4,
       "defect_type": "auto-detected",
       "rule": "cps_exceeded",
       "threshold": 20.0,
-      "measured_value": 162.5,
+      "measured_value": 22.00825309491059,
       "severity": "ERROR",
       "category": "rule",
       "detail": "Rule cps_exceeded triggered"
@@ -48,19 +28,19 @@
     {
       "cue_index": 4,
       "defect_type": "auto-detected",
-      "rule": "sub_one_second",
-      "threshold": 1000.0,
-      "measured_value": 400.0,
+      "rule": "line_too_long",
+      "threshold": 42.0,
+      "measured_value": 48.0,
       "severity": "ERROR",
       "category": "rule",
-      "detail": "Rule sub_one_second triggered"
+      "detail": "Rule line_too_long triggered"
     },
     {
       "cue_index": 6,
       "defect_type": "auto-detected",
       "rule": "cps_exceeded",
       "threshold": 20.0,
-      "measured_value": 22.020725388601036,
+      "measured_value": 22.026431718061673,
       "severity": "ERROR",
       "category": "rule",
       "detail": "Rule cps_exceeded triggered"
@@ -70,23 +50,33 @@
       "defect_type": "auto-detected",
       "rule": "sub_one_second",
       "threshold": 1000.0,
-      "measured_value": 772.0,
+      "measured_value": 454.0,
       "severity": "ERROR",
       "category": "rule",
       "detail": "Rule sub_one_second triggered"
     },
     {
-      "cue_index": 12,
+      "cue_index": 7,
+      "defect_type": "auto-detected",
+      "rule": "line_too_long",
+      "threshold": 42.0,
+      "measured_value": 45.0,
+      "severity": "ERROR",
+      "category": "rule",
+      "detail": "Rule line_too_long triggered"
+    },
+    {
+      "cue_index": 8,
       "defect_type": "auto-detected",
       "rule": "cps_exceeded",
       "threshold": 20.0,
-      "measured_value": 70.0,
+      "measured_value": 87.5,
       "severity": "ERROR",
       "category": "rule",
       "detail": "Rule cps_exceeded triggered"
     },
     {
-      "cue_index": 12,
+      "cue_index": 8,
       "defect_type": "auto-detected",
       "rule": "sub_one_second",
       "threshold": 1000.0,
@@ -96,7 +86,17 @@
       "detail": "Rule sub_one_second triggered"
     },
     {
-      "cue_index": 14,
+      "cue_index": 10,
+      "defect_type": "auto-detected",
+      "rule": "cps_exceeded",
+      "threshold": 20.0,
+      "measured_value": 22.001047668936614,
+      "severity": "ERROR",
+      "category": "rule",
+      "detail": "Rule cps_exceeded triggered"
+    },
+    {
+      "cue_index": 12,
       "defect_type": "auto-detected",
       "rule": "cps_exceeded",
       "threshold": 20.0,
@@ -106,14 +106,34 @@
       "detail": "Rule cps_exceeded triggered"
     },
     {
-      "cue_index": 8,
-      "defect_type": "meaning_swap",
-      "rule": "meaning_changed",
-      "threshold": 0.0,
-      "measured_value": 0.0,
-      "severity": "WARNING",
-      "category": "MEANING_LEVEL",
-      "detail": "Cue 8: 'death' → 'life'"
+      "cue_index": 12,
+      "defect_type": "auto-detected",
+      "rule": "sub_one_second",
+      "threshold": 1000.0,
+      "measured_value": 954.0,
+      "severity": "ERROR",
+      "category": "rule",
+      "detail": "Rule sub_one_second triggered"
+    },
+    {
+      "cue_index": 14,
+      "defect_type": "auto-detected",
+      "rule": "cps_exceeded",
+      "threshold": 20.0,
+      "measured_value": 62.5,
+      "severity": "ERROR",
+      "category": "rule",
+      "detail": "Rule cps_exceeded triggered"
+    },
+    {
+      "cue_index": 14,
+      "defect_type": "auto-detected",
+      "rule": "sub_one_second",
+      "threshold": 1000.0,
+      "measured_value": 400.0,
+      "severity": "ERROR",
+      "category": "rule",
+      "detail": "Rule sub_one_second triggered"
     }
   ]
 }

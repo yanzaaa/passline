@@ -27,6 +27,11 @@ LANGUAGES = [
     ("en", "tos-en.srt", 7),
     ("fr", "tos-fr.srt", 11),
     ("de", "tos-de.srt", 13),
+    ("es", "tos-es.srt", 17),
+    ("ru", "tos-ru.srt", 19),
+    ("pt", "tos-pt.srt", 23),
+    ("zh", "tos-zh.srt", 29),
+    ("fa", "tos-fa.srt", 31),
 ]
 
 

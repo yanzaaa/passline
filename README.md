@@ -97,7 +97,7 @@ gcloud run deploy passline \
   --source . \
   --region us-east1 \
   --allow-unauthenticated \
-  --set-env-vars GOOGLE_CLOUD_PROJECT=your-project-id
+  --set-env-vars GOOGLE_CLOUD_PROJECT=your-project-id,GOOGLE_CLOUD_LOCATION=global
 ```
 
 ---

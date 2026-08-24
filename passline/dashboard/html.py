@@ -504,11 +504,16 @@ input[type=file]{display:none}
 
     <!-- Demo chips -->
     <div class="card" style="padding:10px 14px">
-      <div style="font-size:10px;color:var(--muted);font-weight:600;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">English / French / German / Hopeless Case</div>
+      <div style="font-size:10px;color:var(--muted);font-weight:600;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">Test Corpora & Demos</div>
       <div class="demo-chips">
         <div class="chip" onclick="triggerDemo('demo-en','en-US')">English</div>
         <div class="chip" onclick="triggerDemo('demo-fr','fr-FR')">French</div>
         <div class="chip" onclick="triggerDemo('demo-de','de-DE')">German</div>
+        <div class="chip" onclick="triggerDemo('demo-es','es-ES')">Spanish</div>
+        <div class="chip" onclick="triggerDemo('demo-ru','ru-RU')">Russian</div>
+        <div class="chip" onclick="triggerDemo('demo-pt','pt-BR')">Portuguese</div>
+        <div class="chip" onclick="triggerDemo('demo-zh','zh-CN')">Chinese</div>
+        <div class="chip" onclick="triggerDemo('demo-fa','fa-IR')">Persian</div>
         <div class="chip chip-hazard" onclick="triggerDemo('hopeless','fr-FR')">Hopeless Case</div>
       </div>
     </div>

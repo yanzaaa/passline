@@ -71,9 +71,24 @@ _DEMO_FILES: dict[str, str] = {
     "fr-fr": "demo-fr-broken.srt",
     "de": "demo-de-broken.srt",
     "de-de": "demo-de-broken.srt",
+    "es": "demo-es-broken.srt",
+    "es-es": "demo-es-broken.srt",
+    "ru": "demo-ru-broken.srt",
+    "ru-ru": "demo-ru-broken.srt",
+    "pt": "demo-pt-broken.srt",
+    "pt-br": "demo-pt-broken.srt",
+    "zh": "demo-zh-broken.srt",
+    "zh-cn": "demo-zh-broken.srt",
+    "fa": "demo-fa-broken.srt",
+    "fa-ir": "demo-fa-broken.srt",
     "demo-en": "demo-en-broken.srt",
     "demo-fr": "demo-fr-broken.srt",
     "demo-de": "demo-de-broken.srt",
+    "demo-es": "demo-es-broken.srt",
+    "demo-ru": "demo-ru-broken.srt",
+    "demo-pt": "demo-pt-broken.srt",
+    "demo-zh": "demo-zh-broken.srt",
+    "demo-fa": "demo-fa-broken.srt",
     "hopeless": "hopeless-fr.srt",
 }
 
@@ -190,7 +205,7 @@ async def upload(file: UploadFile, background_tasks: BackgroundTasks) -> JSONRes
     # Detect language from filename (e.g. tos-fr-broken.srt → fr)
     language = "und"
     lower = filename.lower()
-    for lang in ("en", "fr", "de"):
+    for lang in ("en", "fr", "de", "es", "ru", "pt", "zh", "fa"):
         if f"-{lang}" in lower or f"_{lang}" in lower:
             language = lang
             break

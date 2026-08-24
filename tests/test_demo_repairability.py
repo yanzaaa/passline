@@ -23,6 +23,11 @@ DEMO_DIR = Path(__file__).parent.parent / "passline" / "corpus" / "demo"
         ("en", 7, 8),
         ("fr", 11, 13),
         ("de", 13, 12),
+        ("es", 17, 0),
+        ("ru", 19, 0),
+        ("pt", 23, 0),
+        ("zh", 29, 0),
+        ("fa", 31, 0),
     ],
 )
 async def test_demo_repairability(tmp_path: Path, lang: str, seed: int, meaning_cue: int) -> None:
@@ -36,17 +41,19 @@ async def test_demo_repairability(tmp_path: Path, lang: str, seed: int, meaning_
     bus = EventBus(tmp_path / f"demo_{lang}.jsonl")
     approval_queue = ApprovalQueue(bus=bus)
 
+    flags = []
+    if meaning_cue > 0:
+        flags.append(LanguageFlag(
+            cue_index=meaning_cue,
+            confidence=0.87,
+            rule_ref="MT01",
+            explanation="Demo meaning swap flag",
+            suggested_text=None,
+        ))
+
     # 1. Prepare canned LLM response returning only 1 meaning_swap at meaning_cue
     canned = LanguageCheckerOutput(
-        flags=[
-            LanguageFlag(
-                cue_index=meaning_cue,
-                confidence=0.87,
-                rule_ref="MT01",
-                explanation="Demo meaning swap flag",
-                suggested_text=None,
-            )
-        ],
+        flags=flags,
         language=lang,
         checked_cues=14,
     )
@@ -105,12 +112,18 @@ async def test_demo_repairability(tmp_path: Path, lang: str, seed: int, meaning_
                 pass
 
     # 3. Assertions
-    assert approvals_requested == 1, f"Expected 1 approval requested, got {approvals_requested}"
+    if meaning_cue > 0:
+        assert approvals_requested == 1, f"Expected 1 approval requested, got {approvals_requested}"
+    else:
+        assert approvals_requested == 0, f"Expected 0 approvals requested, got {approvals_requested}"
+        
     assert report["verdict"] == "passed", f"Failed for {lang}: {report}"
 
     repaired_bytes = await runner.get_repaired_bytes()
     assert repaired_bytes, "No repaired bytes returned"
-    assert b"Genuinely changed text for meaning swap" in repaired_bytes
+    
+    if meaning_cue > 0:
+        assert b"Genuinely changed text for meaning swap" in repaired_bytes
 
     # Re-parsed repaired SRT grades clean via check_file()
     repaired_file = parse_srt(repaired_bytes, language=lang)
@@ -258,7 +271,7 @@ async def test_language_approval_outcomes(tmp_path: Path, action: str) -> None:
         assert report["violations_found"]["remaining_after_repair"] == 1
 
 
-@pytest.mark.parametrize("lang", ["en", "fr", "de"])
+@pytest.mark.parametrize("lang", ["en", "fr", "de", "es", "ru", "pt", "zh", "fa"])
 def test_deterministic_repair_preserves_text(lang: str) -> None:
     """Ensure that deterministic fixes (like line_too_long or three_line_cue) do not discard text."""
     broken_srt_path = DEMO_DIR / f"demo-{lang}-broken.srt"

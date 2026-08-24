@@ -1,0 +1,8 @@
+{
+  "schema_version": "1.0",
+  "corpus_version": "1",
+  "language": "zh",
+  "source_file": "tos-zh.srt",
+  "seed": 42,
+  "defects": []
+}

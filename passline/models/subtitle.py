@@ -85,6 +85,42 @@ class SubtitleCue(BaseModel):
 
     @computed_field  # type: ignore[prop-decorator]
     @property
+    def display_char_counts(self) -> list[int]:
+        """Visible character count per line, weighted by East Asian display width.
+
+        Wide (W) and Fullwidth (F) characters count as 2.
+        All other characters count as 1.
+        """
+        import unicodedata
+        counts = []
+        for line in self.lines:
+            visible = _strip_markup(line).rstrip()
+            count = 0
+            for char in visible:
+                width = unicodedata.east_asian_width(char)
+                count += 2 if width in ("W", "F") else 1
+            counts.append(count)
+        return counts
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def total_display_chars(self) -> int:
+        """Total visible display characters across all lines."""
+        return sum(self.display_char_counts)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def cps_display(self) -> float:
+        """Characters per second reading speed based on display width.
+
+        Returns ``0.0`` for zero-duration or negative-duration cues.
+        """
+        if self.duration_ms <= 0:
+            return 0.0
+        return self.total_display_chars / (self.duration_ms / 1000.0)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
     def char_counts(self) -> list[int]:
         """Visible character count per line.
 

@@ -41,9 +41,23 @@ URL_CANDIDATES: dict[str, list[str]] = {
         "https://download.blender.org/movies/tears_of_steel/tears_of_steel-de.srt",
         "https://download.blender.org/movies/ToS/subtitles/TOS-de.srt",
     ],
+    "es": [f"{BASE}TOS-es.srt"],
+    "ru": [f"{BASE}TOS-ru.srt"],
+    "pt": [f"{BASE}TOS-PT-BR.srt"],
+    "zh": [f"{BASE}TOS-CH.srt"],
+    "fa": [f"{BASE}TOS-Persian.srt"],
 }
 
-OUTPUT_FILENAMES = {"en": "tos-en.srt", "fr": "tos-fr.srt", "de": "tos-de.srt"}
+OUTPUT_FILENAMES = {
+    "en": "tos-en.srt", 
+    "fr": "tos-fr.srt", 
+    "de": "tos-de.srt",
+    "es": "tos-es.srt",
+    "ru": "tos-ru.srt",
+    "pt": "tos-pt.srt",
+    "zh": "tos-zh.srt",
+    "fa": "tos-fa.srt",
+}
 
 ATTRIBUTION = """# Corpus Assets — CC-BY Attribution
 
@@ -60,6 +74,11 @@ https://creativecommons.org/licenses/by/3.0/
 | English | tos-en.srt | https://download.blender.org/demo/movies/ToS/subtitles/TOS-en.srt |
 | French | tos-fr.srt | https://download.blender.org/demo/movies/ToS/subtitles/TOS-fr-orig.srt |
 | German | tos-de.srt | https://download.blender.org/demo/movies/ToS/subtitles/TOS-de.srt |
+| Spanish | tos-es.srt | https://download.blender.org/demo/movies/ToS/subtitles/TOS-es.srt |
+| Russian | tos-ru.srt | https://download.blender.org/demo/movies/ToS/subtitles/TOS-ru.srt |
+| Portuguese | tos-pt.srt | https://download.blender.org/demo/movies/ToS/subtitles/TOS-PT-BR.srt |
+| Chinese | tos-zh.srt | https://download.blender.org/demo/movies/ToS/subtitles/TOS-CH.srt |
+| Persian | tos-fa.srt | https://download.blender.org/demo/movies/ToS/subtitles/TOS-Persian.srt |
 
 These files are used as test fixtures for the Passline QC engine.
 They are committed to this repository under the terms of the CC-BY 3.0 license.
@@ -97,7 +116,7 @@ def main() -> int:
     successes: list[tuple[str, str, int]] = []
     failures: list[str] = []
 
-    for lang in ("en", "fr", "de"):
+    for lang in ("en", "fr", "de", "es", "ru", "pt", "zh", "fa"):
         try:
             url, data = fetch_one(lang)
             out_path = OUT_DIR / OUTPUT_FILENAMES[lang]

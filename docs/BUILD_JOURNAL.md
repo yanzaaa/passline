@@ -387,9 +387,9 @@ passline-dashboard
 open http://localhost:8000
 
 # Deploy to Cloud Run
-gcloud run deploy passline --source . --region us-central1 \
+gcloud run deploy passline --source . --region us-east1 \
   --allow-unauthenticated \
-  --set-env-vars GOOGLE_CLOUD_PROJECT=your-project-id
+  --set-env-vars GOOGLE_CLOUD_PROJECT=your-project-id,GOOGLE_CLOUD_LOCATION=global
 ```
 
 ---
@@ -419,7 +419,7 @@ gcloud run deploy passline --source . --region us-central1 \
 
 ### Result
 
-**235 tests passing, 3 skipped** (live LLM tests behind `--live-llm`) — `python -m pytest`
+**246 tests passing, 3 skipped** (live LLM tests behind `--live-llm`) — `python -m pytest`
 
 ### Plan
 

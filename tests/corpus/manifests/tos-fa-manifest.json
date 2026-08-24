@@ -1,0 +1,99 @@
+{
+  "schema_version": "1.0",
+  "corpus_version": "1",
+  "language": "fa",
+  "source_file": "tos-fa.srt",
+  "seed": 42,
+  "defects": [
+    {
+      "cue_index": 3,
+      "defect_type": "line_overflow",
+      "rule": "line_too_long",
+      "threshold": 42,
+      "measured_value": 63.0,
+      "severity": "ERROR",
+      "category": "DETERMINISTIC",
+      "detail": "Cue 3: longest line=63 chars > 42"
+    },
+    {
+      "cue_index": 11,
+      "defect_type": "cps_blowout",
+      "rule": "cps_exceeded",
+      "threshold": 20.0,
+      "measured_value": 22.01,
+      "severity": "ERROR",
+      "category": "DETERMINISTIC",
+      "detail": "Cue 11: CPS=22.01 > 20.0 (dur=954ms, chars=21)"
+    },
+    {
+      "cue_index": 13,
+      "defect_type": "short_duration",
+      "rule": "sub_one_second",
+      "threshold": 1000.0,
+      "measured_value": 400.0,
+      "severity": "ERROR",
+      "category": "DETERMINISTIC",
+      "detail": "Cue 13: duration=400ms < 1000ms"
+    },
+    {
+      "cue_index": 15,
+      "defect_type": "overlap",
+      "rule": "overlapping_cues",
+      "threshold": 0.0,
+      "measured_value": 500.0,
+      "severity": "ERROR",
+      "category": "DETERMINISTIC",
+      "detail": "Cue 15 end=193500ms overlaps cue 16 start=193000ms by 500ms"
+    },
+    {
+      "cue_index": 20,
+      "defect_type": "line_overflow",
+      "rule": "line_too_long",
+      "threshold": 42,
+      "measured_value": 57.0,
+      "severity": "ERROR",
+      "category": "DETERMINISTIC",
+      "detail": "Cue 20: longest line=57 chars > 42"
+    },
+    {
+      "cue_index": 25,
+      "defect_type": "short_duration",
+      "rule": "sub_one_second",
+      "threshold": 1000.0,
+      "measured_value": 400.0,
+      "severity": "ERROR",
+      "category": "DETERMINISTIC",
+      "detail": "Cue 25: duration=400ms < 1000ms"
+    },
+    {
+      "cue_index": 38,
+      "defect_type": "three_line_cue",
+      "rule": "three_line_cue",
+      "threshold": 2.0,
+      "measured_value": 3.0,
+      "severity": "WARNING",
+      "category": "DETERMINISTIC",
+      "detail": "Cue 38: 3 lines (max is 2)"
+    },
+    {
+      "cue_index": 70,
+      "defect_type": "cps_blowout",
+      "rule": "cps_exceeded",
+      "threshold": 20.0,
+      "measured_value": 22.01,
+      "severity": "ERROR",
+      "category": "DETERMINISTIC",
+      "detail": "Cue 70: CPS=22.01 > 20.0 (dur=954ms, chars=21)"
+    },
+    {
+      "cue_index": 71,
+      "defect_type": "overlap",
+      "rule": "overlapping_cues",
+      "threshold": 0.0,
+      "measured_value": 500.0,
+      "severity": "ERROR",
+      "category": "DETERMINISTIC",
+      "detail": "Cue 71 end=562500ms overlaps cue 72 start=562000ms by 500ms"
+    }
+  ]
+}

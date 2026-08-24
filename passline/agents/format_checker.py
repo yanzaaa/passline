@@ -76,6 +76,23 @@ class FormatCheckerAgent(BaseAgent):
         all_findings: list[Finding] = check_file(subtitle_file)
         format_findings = [f for f in all_findings if f.rule in _FORMAT_RULES]
 
+        # Convert parse_anomalies into format findings
+        for anomaly in subtitle_file.parse_anomalies:
+            # Try to extract cue index from "Cue N:" or "Skipped cue N:"
+            import re
+            m = re.search(r"[Cc]ue (\d+)", anomaly)
+            cue_idx = int(m.group(1)) if m else 0
+            
+            finding = Finding(
+                rule="non_canonical_format",
+                cue_index=cue_idx,
+                measured_value=0.0,
+                threshold=0.0,
+                severity="WARNING",
+                explanation=anomaly,
+            )
+            format_findings.append(finding)
+
         # Emit QC_VIOLATION events for each format finding
         for finding in format_findings:
             self.bus.emit(DeliveryEvent(

@@ -23,7 +23,10 @@ from passline.models.subtitle import SubtitleFile
 from passline.qc.thresholds import (
     CPS_VIOLATION,
     CPS_WARNING_LOW,
+    CPS_VIOLATION_CJK,
+    CPS_WARNING_LOW_CJK,
     LINE_CHAR_MAX,
+    LINE_CHAR_MAX_CJK,
     MAX_LINES_PER_CUE,
     MIN_DURATION_MS,
 )
@@ -80,6 +83,12 @@ def check_file(
     """
     findings: list[Finding] = []
     cues = subtitle_file.cues
+    
+    is_cjk = language.lower() in ("zh", "ja", "ko", "zh-tw", "zh-cn", "zh-hk", "zh-hant", "zh-hans")
+
+    limit_cps_violation = CPS_VIOLATION_CJK if is_cjk else CPS_VIOLATION
+    limit_cps_warning = CPS_WARNING_LOW_CJK if is_cjk else CPS_WARNING_LOW
+    limit_line_char = LINE_CHAR_MAX_CJK if is_cjk else LINE_CHAR_MAX
 
     for i, cue in enumerate(cues):
 
@@ -128,44 +137,46 @@ def check_file(
             ))
 
         # ── Rule: line_too_long ───────────────────────────────────────────
-        if any(c > LINE_CHAR_MAX for c in cue.char_counts):
-            worst = max(cue.char_counts)
+        char_counts = cue.display_char_counts if is_cjk else cue.char_counts
+        if any(c > limit_line_char for c in char_counts):
+            worst = max(char_counts)
             findings.append(Finding(
                 rule="line_too_long",
                 cue_index=cue.index,
                 measured_value=float(worst),
-                threshold=float(LINE_CHAR_MAX),
+                threshold=float(limit_line_char),
                 severity="ERROR",
                 explanation=(
                     f"Cue {cue.index}: longest visible line={worst} chars "
-                    f"> {LINE_CHAR_MAX} limit"
+                    f"> {limit_line_char} limit"
                 ),
             ))
 
         # ── Rules: cps_exceeded / cps_warning ────────────────────────────
-        # Use cue.cps — the model's computed property, not reimplemented math.
-        if cue.cps > CPS_VIOLATION:
+        # Use cue.cps or cue.cps_display — the model's computed property.
+        cue_cps = cue.cps_display if is_cjk else cue.cps
+        if cue_cps > limit_cps_violation:
             findings.append(Finding(
                 rule="cps_exceeded",
                 cue_index=cue.index,
-                measured_value=cue.cps,
-                threshold=CPS_VIOLATION,
+                measured_value=cue_cps,
+                threshold=limit_cps_violation,
                 severity="ERROR",
                 explanation=(
-                    f"Cue {cue.index}: {cue.cps:.2f} CPS > {CPS_VIOLATION} limit "
-                    f"({cue.total_chars} chars / {cue.duration_ms}ms)"
+                    f"Cue {cue.index}: {cue_cps:.2f} CPS > {limit_cps_violation} limit "
+                    f"({cue.total_display_chars if is_cjk else cue.total_chars} chars / {cue.duration_ms}ms)"
                 ),
             ))
-        elif CPS_WARNING_LOW <= cue.cps <= CPS_VIOLATION:
+        elif limit_cps_warning <= cue_cps <= limit_cps_violation:
             findings.append(Finding(
                 rule="cps_warning",
                 cue_index=cue.index,
-                measured_value=cue.cps,
-                threshold=CPS_WARNING_LOW,
+                measured_value=cue_cps,
+                threshold=limit_cps_warning,
                 severity="WARNING",
                 explanation=(
-                    f"Cue {cue.index}: {cue.cps:.2f} CPS in warning band "
-                    f"[{CPS_WARNING_LOW}–{CPS_VIOLATION}]"
+                    f"Cue {cue.index}: {cue_cps:.2f} CPS in warning band "
+                    f"[{limit_cps_warning}–{limit_cps_violation}]"
                 ),
             ))
 

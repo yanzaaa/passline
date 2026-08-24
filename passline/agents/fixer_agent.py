@@ -101,24 +101,96 @@ Important constraints:
 
 # ── Deterministic repair helpers ──────────────────────────────────────────────
 
-def _split_long_line(line: str, max_chars: int = LINE_CHAR_MAX) -> list[str]:
-    """Split *line* at the nearest space at or before *max_chars*."""
-    if len(line.rstrip()) <= max_chars:
-        return [line]
-    split_at = line.rfind(" ", 0, max_chars + 1)
-    if split_at == -1:
-        # No space — hard split
-        return [line[:max_chars], line[max_chars:]]
-    return [line[:split_at], line[split_at + 1:]]
+def _split_long_line(line: str, max_chars: int = LINE_CHAR_MAX, is_cjk: bool = False) -> list[str]:
+    """Split *line* at the nearest space or punctuation at or before *max_chars*."""
+    if not is_cjk:
+        if len(line.rstrip()) <= max_chars:
+            return [line]
+        split_at = line.rfind(" ", 0, max_chars + 1)
+        if split_at == -1:
+            # No space — hard split
+            return [line[:max_chars], line[max_chars:]]
+        return [line[:split_at], line[split_at + 1:]]
+    else:
+        # CJK splitting based on display width and punctuation.
+        from passline.models.subtitle import _strip_markup
+        import unicodedata
+        import re
+
+        visible = _strip_markup(line).rstrip()
+        
+        # Calculate where the display width budget is exhausted
+        curr_width = 0
+        split_idx = -1
+        for i, char in enumerate(visible):
+            w = unicodedata.east_asian_width(char)
+            curr_width += 2 if w in ("W", "F") else 1
+            if curr_width > max_chars:
+                split_idx = i - 1 # End of safe segment
+                break
+
+        if split_idx == -1: # Fits
+            return [line]
+            
+        # Find nearest punctuation before or at split_idx
+        # CJK punctuation marks (comma, period, etc)
+        punct = r"[，。、！？；：,.!?;:]"
+        # Search backwards from split_idx
+        found_idx = -1
+        for i in range(split_idx, -1, -1):
+            if re.match(punct, visible[i]):
+                found_idx = i
+                break
+                
+        if found_idx == -1:
+            # No punctuation to break on. Do not mangle CJK text.
+            return [line]
+            
+        # We break AFTER the punctuation.
+        break_point = found_idx + 1
+        
+        # Now map the break_point (in visible text) back to the original line with markup
+        # This is a bit tricky, but for CJK we often don't have markup mid-sentence, 
+        # or we just split the raw string if we assume no complex inline markup.
+        # To be safe and simple, we do a basic character mapping.
+        raw_idx = 0
+        vis_idx = 0
+        in_tag = False
+        final_raw_split = -1
+        
+        if break_point == len(visible):
+             return [line]
+             
+        for i, char in enumerate(line):
+            if char == '<':
+                in_tag = True
+            if not in_tag:
+                vis_idx += 1
+            if char == '>':
+                in_tag = False
+                
+            if vis_idx == break_point and not in_tag:
+                final_raw_split = i + 1
+                break
+                
+        if final_raw_split == -1:
+            return [line]
+            
+        return [line[:final_raw_split].strip(), line[final_raw_split:].strip()]
 
 
 def _apply_deterministic_fix(
     cues: list[SubtitleCue],
     finding: dict,
+    language: str = "und",
 ) -> list[SubtitleCue]:
     """Return a new cues list with the deterministic fix applied for *finding*."""
     rule = finding["rule"]
     cue_index = finding["cue_index"]  # 1-based
+    
+    is_cjk = language.lower() in ("zh", "ja", "ko", "zh-tw", "zh-cn", "zh-hk", "zh-hant", "zh-hans")
+    from passline.qc.thresholds import LINE_CHAR_MAX_CJK, LINE_CHAR_MAX
+    limit_line_char = LINE_CHAR_MAX_CJK if is_cjk else LINE_CHAR_MAX
 
     # Build mutable dict copy of cues for easy replacement
     cue_list = list(cues)
@@ -131,7 +203,7 @@ def _apply_deterministic_fix(
     if rule == "line_too_long":
         new_lines: list[str] = []
         for line in cue.lines:
-            new_lines.extend(_split_long_line(line))
+            new_lines.extend(_split_long_line(line, max_chars=limit_line_char, is_cjk=is_cjk))
         # Do not truncate text. If reflowing creates > 2 lines, leave it unfixable
         # if it can't fit in 3 lines either, we don't truncate text.
         # Actually, standard is max 2 lines, but 3 lines is flagged. If we just created >3 lines, we cannot fix it easily.
@@ -141,19 +213,32 @@ def _apply_deterministic_fix(
 
     elif rule == "three_line_cue":
         if len(cue.lines) > 2:
-            # Join last two lines if combined visible length <= LINE_CHAR_MAX
+            # Join last two lines if combined visible length <= limit_line_char
             from passline.models.subtitle import _strip_markup
+            import unicodedata
             combined = cue.lines[-2].rstrip() + " " + cue.lines[-1].lstrip()
-            if len(_strip_markup(combined).rstrip()) <= LINE_CHAR_MAX:
+            
+            combined_vis = _strip_markup(combined).rstrip()
+            width = 0
+            if is_cjk:
+                for char in combined_vis:
+                    w = unicodedata.east_asian_width(char)
+                    width += 2 if w in ("W", "F") else 1
+            else:
+                width = len(combined_vis)
+                
+            if width <= limit_line_char:
                 new_lines = list(cue.lines[:-2]) + [combined]
                 cue_list[idx] = cue.model_copy(update={"lines": new_lines})
             # else: do not discard the third line; leave unchanged as unfixable.
 
     elif rule in ("cps_exceeded", "cps_warning"):
         # Extend end_ms so CPS drops to just below CPS_WARNING_LOW (clean state)
-        chars = cue.total_chars
+        chars = cue.total_display_chars if is_cjk else cue.total_chars
         if chars > 0:
-            new_duration_ms = int(chars / CPS_WARNING_LOW * 1000) + 1
+            from passline.qc.thresholds import CPS_WARNING_LOW_CJK, CPS_WARNING_LOW
+            limit_cps_warning = CPS_WARNING_LOW_CJK if is_cjk else CPS_WARNING_LOW
+            new_duration_ms = int(chars / limit_cps_warning * 1000) + 1
             new_end_ms = cue.start_ms + new_duration_ms
             # Don't extend into the next cue (leave 50ms gap)
             if idx + 1 < len(cue_list):
@@ -237,7 +322,7 @@ class FixerAgent(LlmAgent):
                 cue_index = finding["cue_index"]
                 orig_cue = next((c for c in cues if c.index == cue_index), None)
                 original_text = "\n".join(orig_cue.lines) if orig_cue else ""
-                new_cues = _apply_deterministic_fix(cues, finding)
+                new_cues = _apply_deterministic_fix(cues, finding, language)
                 if new_cues is not cues:
                     repaired_cue = next((c for c in new_cues if c.index == cue_index), None)
                     repaired_text = "\n".join(repaired_cue.lines) if repaired_cue else ""

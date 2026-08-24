@@ -13,6 +13,11 @@ https://creativecommons.org/licenses/by/3.0/
 | English | tos-en.srt | https://download.blender.org/demo/movies/ToS/subtitles/TOS-en.srt |
 | French | tos-fr.srt | https://download.blender.org/demo/movies/ToS/subtitles/TOS-fr-orig.srt |
 | German | tos-de.srt | https://download.blender.org/demo/movies/ToS/subtitles/TOS-de.srt |
+| Spanish | tos-es.srt | https://download.blender.org/demo/movies/ToS/subtitles/TOS-es.srt |
+| Russian | tos-ru.srt | https://download.blender.org/demo/movies/ToS/subtitles/TOS-ru.srt |
+| Portuguese | tos-pt.srt | https://download.blender.org/demo/movies/ToS/subtitles/TOS-PT-BR.srt |
+| Chinese | tos-zh.srt | https://download.blender.org/demo/movies/ToS/subtitles/TOS-CH.srt |
+| Persian | tos-fa.srt | https://download.blender.org/demo/movies/ToS/subtitles/TOS-Persian.srt |
 
 These files are used as test fixtures for the Passline QC engine.
 They are committed to this repository under the terms of the CC-BY 3.0 license.
