@@ -108,6 +108,18 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 }
 
 /* ── Drop zone ───────────────────────────────────────────────────────── */
+.mic-btn { background: var(--bg); border: 1px solid var(--border); border-radius: 50%; width: 44px; height: 44px; cursor: pointer; color: var(--text); font-size: 18px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; position: absolute; right: 16px; top: 16px; }
+.mic-btn:hover { background: var(--surface); border-color: var(--dim); }
+.mic-btn.recording { background: rgba(255, 60, 60, 0.15); border-color: rgba(255, 60, 60, 0.5); color: #ff5555; animation: pulse 1.5s infinite; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255,60,60,0.4); } 70% { box-shadow: 0 0 0 10px rgba(255,60,60,0); } 100% { box-shadow: 0 0 0 0 rgba(255,60,60,0); } }
+
+.origination-container { border: 1px solid var(--border); background: var(--surface); border-radius: 8px; margin-bottom: 20px; display: none; flex-direction: column; overflow: hidden; position: relative; }
+.origination-container.active { display: flex; }
+.origination-header { padding: 12px 16px; background: rgba(0,0,0,0.2); border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 500; color: var(--dim); display: flex; justify-content: space-between; align-items: center; }
+.origination-status { color: var(--primary); display: flex; align-items: center; gap: 8px; }
+.origination-status.error { color: #ff5555; }
+.origination-spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.1); border-top-color: currentColor; border-radius: 50%; animation: spin 1s linear infinite; }
+
 .dropzone{
   border:2px dashed var(--border2);
   border-radius:var(--r2);padding:20px;
@@ -495,11 +507,22 @@ input[type=file]{display:none}
     </div>
 
     <!-- Drop zone -->
-    <div class="dropzone" id="dropzone" title="Drop an SRT file or click to browse">
+    <div class="dropzone" id="dropzone" style="position: relative;" title="Drop an SRT file or click to browse">
       <div class="dropzone-icon">⬇</div>
       <div class="dropzone-label">Drop subtitle file here</div>
       <div class="dropzone-sub">or click to browse · runs QC pipeline</div>
+      <button class="mic-btn" id="micBtn" title="Hold to record speech">🎤</button>
       <input type="file" id="file-input" accept=".srt,.vtt,.ass,.ssa">
+    </div>
+
+    <div class="origination-container" id="originationCont">
+      <div class="origination-header">
+        <div>Origination Station</div>
+        <div class="origination-status" id="originationStatus">
+          <div class="origination-spinner"></div>
+          <span id="originationStatusText">Transcribing...</span>
+        </div>
+      </div>
     </div>
 
     <!-- Demo chips -->
@@ -1228,7 +1251,7 @@ async function showApproval(item) {
     <div style="font-family:var(--mono);color:var(--text-dim);margin-bottom:8px;">
       Delivery ${esc(item.delivery_id)} · Cue ${item.cue_index}
     </div>
-    <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px;font-family:var(--mono);">
+    <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px;font-family:var(--mono);" dir="${lang === 'fa' || lang === 'fa-IR' || lang === 'fa-ir' ? 'rtl' : 'ltr'}">
       <div style="color:var(--amber);">BEFORE:<br/>${esc(item.original_text || '')}</div>
       <div style="color:var(--green);">AFTER:<br/>${esc(item.proposed_text || '')}</div>
     </div>
@@ -1454,6 +1477,116 @@ function esc(s) {
 }
 
 // ── Boot ─────────────────────────────────────────────────────────────
+let mediaRecorder;
+let audioChunks = [];
+let originationJobId = null;
+let originationTimer = null;
+
+const micBtn = document.getElementById('micBtn');
+const originationCont = document.getElementById('originationCont');
+const originationStatusText = document.getElementById('originationStatusText');
+const originationStatus = document.getElementById('originationStatus');
+
+if (micBtn) {
+  micBtn.addEventListener('mousedown', startRecording);
+  micBtn.addEventListener('mouseup', stopRecording);
+  micBtn.addEventListener('mouseleave', () => { if (mediaRecorder && mediaRecorder.state === 'recording') stopRecording(); });
+}
+
+async function startRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+    audioChunks = [];
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+    mediaRecorder.onstop = uploadRecording;
+    mediaRecorder.start();
+    micBtn.classList.add('recording');
+  } catch (err) {
+    console.error('Mic access denied or error:', err);
+    alert('Microphone access is required to use this feature.');
+  }
+}
+
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+    mediaRecorder.stream.getTracks().forEach(t => t.stop());
+  }
+  micBtn.classList.remove('recording');
+}
+
+async function uploadRecording() {
+  const blob = new Blob(audioChunks, { type: 'audio/webm;codecs=opus' });
+  if (blob.size > 20 * 1024 * 1024) {
+    alert("Audio recording exceeds the 20MB limit. Please record a shorter clip.");
+    return;
+  }
+  
+  const fd = new FormData();
+  fd.append('file', blob, 'recording.webm');
+  fd.append('source_language', 'en'); 
+  
+  originationCont.classList.add('active');
+  originationStatusText.textContent = 'Uploading...';
+  originationStatus.classList.remove('error');
+  const spinner = document.querySelector('.origination-spinner');
+  if (spinner) spinner.style.display = 'block';
+  
+  try {
+    const resp = await fetch('/api/originate', { method: 'POST', body: fd });
+    if (!resp.ok) {
+        let msg = "Upload failed";
+        try { const err = await resp.json(); msg = err.detail || msg; } catch(e){}
+        throw new Error(msg);
+    }
+    const data = await resp.json();
+    originationJobId = data.job_id;
+    originationStatusText.textContent = 'Transcribing...';
+    originationTimer = setInterval(pollOrigination, 1000);
+  } catch (e) {
+    console.error('Origination failed:', e);
+    originationStatusText.textContent = e.message;
+    originationStatus.classList.add('error');
+    if (spinner) spinner.style.display = 'none';
+  }
+}
+
+async function pollOrigination() {
+  if (!originationJobId) return;
+  try {
+    const resp = await fetch(`/api/originate/status/${originationJobId}`);
+    if (resp.ok) {
+      const data = await resp.json();
+      const st = data.status;
+      if (st === 'completed') {
+        clearInterval(originationTimer);
+        originationStatusText.textContent = 'Spawning pipelines...';
+        setTimeout(() => originationCont.classList.remove('active'), 3000);
+      } else if (st === 'failed') {
+        clearInterval(originationTimer);
+        originationStatusText.textContent = 'Processing failed.';
+        originationStatus.classList.add('error');
+        const spinner = document.querySelector('.origination-spinner');
+        if (spinner) spinner.style.display = 'none';
+      } else {
+        const displayStatus = st.replace('_', ' ');
+        originationStatusText.textContent = displayStatus.charAt(0).toUpperCase() + displayStatus.slice(1) + '...';
+      }
+    }
+  } catch (e) {
+    console.error('Poll failed:', e);
+  }
+}
+
+const originalResetBtn = document.getElementById('resetBtn');
+if (originalResetBtn) {
+    originalResetBtn.addEventListener('click', () => {
+        originationCont.classList.remove('active');
+        if (originationTimer) clearInterval(originationTimer);
+    });
+}
+
 connectSSE();
 </script>
 </body>

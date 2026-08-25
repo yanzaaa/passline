@@ -439,3 +439,12 @@ python -m pytest tests/test_mission08_evidence.py -v
 # Run only demo repairability tests
 python -m pytest tests/test_demo_repairability.py -v
 ```
+
+## Mission 09 - Origination
+- Validation verified Gemini inline audio capabilities.
+- Built transcriber.py to hit Gemini 3 Flash Preview.
+- Built cue_builder.py to reliably pack segments into CPS and length limits using pure python.
+- Built translator.py utilizing GenAI with structured JSON extraction.
+- Added POST /api/originate and /api/originate/status to app.py.
+- Implemented browser MediaRecorder in dashboard/html.py.
+- Built fully covered golden-file test_cue_builder.py and test_origination_e2e.py.

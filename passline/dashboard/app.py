@@ -175,6 +175,13 @@ async def reset() -> JSONResponse:
     """Truncate the event log and stop replay for a clean board take."""
     stop_replay()
     
+    # Origination jobs reset
+    try:
+        from passline.origination.orchestrator import cancel_all_jobs
+        cancel_all_jobs()
+    except ImportError:
+        pass
+    
     # Cancel all active delivery tasks
     for task in list(_active_deliveries):
         task.cancel()
@@ -498,3 +505,34 @@ def run() -> None:
 
 if __name__ == "__main__":
     run()
+
+
+@app.post("/api/originate")
+async def api_originate(request: Request):
+    from passline.origination.orchestrator import start_origination
+    form = await request.form()
+    file_obj = form.get("file")
+    source_language = form.get("source_language")
+    
+    if not source_language:
+        raise HTTPException(status_code=400, detail="source_language is required")
+        
+    if not file_obj:
+        raise HTTPException(status_code=400, detail="file is required")
+        
+    media_bytes = await file_obj.read()
+    mime_type = file_obj.content_type
+    
+    if not mime_type or not mime_type.startswith(("audio/", "video/")):
+        raise HTTPException(status_code=415, detail="Unsupported media type")
+        
+    job_id = start_origination(media_bytes, mime_type, source_language, bus)
+    return JSONResponse(status_code=202, content={"job_id": job_id})
+
+@app.get("/api/originate/status/{job_id}")
+async def api_originate_status(job_id: str):
+    from passline.origination.orchestrator import get_job_status
+    status = get_job_status(job_id)
+    if not status:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return {"status": status}

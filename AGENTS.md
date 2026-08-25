@@ -135,3 +135,5 @@ RootCoordinator (LlmAgent, gemini-3-flash-preview)
 | `GET` | `/api/queue` | List pending approval items |
 | `POST` | `/api/queue/{id}/approve` | Approve a pending item |
 | `POST` | `/api/queue/{id}/reject` | Reject a pending item |
+
+## Mission 09 Origination Agents

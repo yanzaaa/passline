@@ -194,3 +194,6 @@ The subtitle assets used for demonstration and testing are licensed under [Creat
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Origination System (Mission 09)
+Passline now supports speech-to-delivery origination via microphone recording.
