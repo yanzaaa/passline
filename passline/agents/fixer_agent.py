@@ -381,12 +381,35 @@ class FixerAgent(LlmAgent):
                             return len(clean.replace(" ", ""))
                         return len([w for w in re.findall(r'\w+', clean) if w])
                         
+                    def _is_majority_cjk(text: str) -> bool:
+                        from passline.models.subtitle import _strip_markup
+                        import unicodedata
+                        clean = _strip_markup(text).replace(" ", "")
+                        cjk_count = 0
+                        other_count = 0
+                        for char in clean:
+                            if not char.isalpha() and not char.isnumeric():
+                                continue
+                            if unicodedata.east_asian_width(char) in ("W", "F"):
+                                cjk_count += 1
+                            else:
+                                other_count += 1
+                        return cjk_count > other_count
+
                     prop = f.get("suggested_text")
                     if not prop or not prop.strip() or prop.strip() == o_text.strip():
                         prop = await self._propose_language_fix(o_text, expl, language)
                         
                     is_condensation = f.get("rule", "") in ("cps_exceeded", "line_too_long", "condensation") or "condensation" in expl.lower()
                     
+                    if prop:
+                        o_cjk = _is_majority_cjk(o_text)
+                        if _is_majority_cjk(prop) != o_cjk:
+                            # Script switched, retry once
+                            prop = await self._propose_language_fix(o_text, expl + " (CRITICAL INSTRUCTION: The repair must stay in the original language.)", language)
+                            if prop and _is_majority_cjk(prop) != o_cjk:
+                                prop = None # Still switches script, reject
+
                     if prop and not is_condensation:
                         o_words = _count_words(o_text)
                         p_words = _count_words(prop)
@@ -397,6 +420,8 @@ class FixerAgent(LlmAgent):
                                 p_words = _count_words(prop)
                                 if p_words < o_words:
                                     prop = None # Mark unfixable if retry still drops words
+                                elif _is_majority_cjk(prop) != _is_majority_cjk(o_text):
+                                    prop = None # Dropped words fix caused script switch, reject
 
                     return (f, o_text, prop, expl, r_ref, is_condensation)
 

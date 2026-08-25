@@ -90,7 +90,8 @@ class VerifierAgent(BaseAgent):
                     surviving_language.append(f)
 
         combined = det_dicts + surviving_language
-        verdict = "clean" if not combined else "violations_remain"
+        has_errors = any(f.get("severity", "ERROR").upper() == "ERROR" for f in combined)
+        verdict = "clean" if not has_errors else "violations_remain"
 
         emit_station_ready(
             self.bus, _STATION_ID, _STATION_NAME, delivery_id, language,
@@ -102,8 +103,8 @@ class VerifierAgent(BaseAgent):
             len(det_dicts), len(surviving_language), len(combined), verdict,
         )
 
-        if not combined:
-            # Zero violations — signal the LoopAgent to exit
+        if not has_errors:
+            # Zero errors — signal the LoopAgent to exit
             yield Event(
                 author=self.name,
                 actions=EventActions(
@@ -112,7 +113,7 @@ class VerifierAgent(BaseAgent):
                 ),
             )
         else:
-            # Still violations — update state and let the loop continue
+            # Still errors — update state and let the loop continue
             yield Event(
                 author=self.name,
                 actions=EventActions(state_delta={STATE_ALL_FINDINGS: combined}),

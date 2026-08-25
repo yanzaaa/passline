@@ -85,9 +85,10 @@ class ReporterAgent(BaseAgent):
             except Exception as exc:
                 log.error("ReporterAgent: write_srt failed — %s", exc)
 
-        # Verdict: green if no remaining findings, red otherwise
+        # Verdict: green if no remaining errors, red otherwise
         remaining = len(all_findings)
-        verdict = "passed" if remaining == 0 else "failed"
+        has_errors = any(f.get("severity", "ERROR").upper() == "ERROR" for f in all_findings)
+        verdict = "passed" if not has_errors else "failed"
 
         report: dict = {
             "delivery_id": delivery_id,
