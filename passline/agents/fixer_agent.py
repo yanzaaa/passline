@@ -117,50 +117,56 @@ def _split_long_line(line: str, max_chars: int = LINE_CHAR_MAX, is_cjk: bool = F
         # CJK splitting based on display width and punctuation.
         from passline.models.subtitle import _strip_markup
         import unicodedata
-        import re
 
         visible = _strip_markup(line).rstrip()
         
-        # Calculate where the display width budget is exhausted
-        curr_width = 0
-        split_idx = -1
-        for i, char in enumerate(visible):
-            w = unicodedata.east_asian_width(char)
-            curr_width += 2 if w in ("W", "F") else 1
-            if curr_width > max_chars:
-                split_idx = i - 1 # End of safe segment
-                break
+        def get_width(text: str) -> int:
+            return sum(2 if unicodedata.east_asian_width(c) in ("W", "F") else 1 for c in text)
 
-        if split_idx == -1: # Fits
+        if get_width(visible) <= max_chars:
             return [line]
             
-        # Find nearest punctuation before or at split_idx
-        # CJK punctuation marks (comma, period, etc)
-        punct = r"[，。、！？；：,.!?;:]"
-        # Search backwards from split_idx
-        found_idx = -1
-        for i in range(split_idx, -1, -1):
-            if re.match(punct, visible[i]):
-                found_idx = i
-                break
-                
-        if found_idx == -1:
-            # Fallback 1: Is there a space?
-            space_idx = visible.rfind(" ", 0, split_idx + 1)
-            if space_idx != -1:
-                break_point = space_idx + 1
-            else:
-                # Fallback 2: Hard split at split_idx
-                break_point = split_idx + 1
-        else:
-            # We break AFTER the punctuation.
-            break_point = found_idx + 1
+        closing_punct = set(".,!?:;)]}，。、！？；：”’》〉")
+        punct = set(" .,!?:;)]}，。、！？；：”’》〉([{“‘《〈")
         
-        # Now map the break_point (in visible text) back to the original line with markup
-        # This is a bit tricky, but for CJK we often don't have markup mid-sentence, 
-        # or we just split the raw string if we assume no complex inline markup.
-        # To be safe and simple, we do a basic character mapping.
-        raw_idx = 0
+        best_k = -1
+        candidate_ks = []
+        for k in range(len(visible) - 1):
+            if get_width(visible[:k+1]) <= max_chars:
+                if visible[k+1] not in closing_punct:
+                    candidate_ks.append(k)
+                    
+        if not candidate_ks:
+            # Fallback if no valid split found
+            for k in range(len(visible) - 1, -1, -1):
+                if get_width(visible[:k+1]) <= max_chars:
+                    best_k = k
+                    break
+        else:
+            # Avoid orphaning a single character on its own line
+            no_orphan_ks = [k for k in candidate_ks if len(visible) - (k+1) > 1 and (k+1) > 1]
+            pool = no_orphan_ks if no_orphan_ks else candidate_ks
+            
+            punct_fits = [k for k in pool if visible[k] in punct and get_width(visible[k+1:]) <= max_chars]
+            if punct_fits:
+                best_k = max(punct_fits)
+            else:
+                char_fits = [k for k in pool if get_width(visible[k+1:]) <= max_chars]
+                if char_fits:
+                    best_k = max(char_fits)
+                else:
+                    punct_any = [k for k in pool if visible[k] in punct]
+                    if punct_any:
+                        best_k = max(punct_any)
+                    else:
+                        best_k = max(pool)
+                        
+        if best_k == -1:
+            return [line]
+            
+        break_point = best_k + 1
+        
+        # Map break_point back to the raw string with markup
         vis_idx = 0
         in_tag = False
         final_raw_split = -1
@@ -217,11 +223,8 @@ def _apply_deterministic_fix(
         new_lines: list[str] = []
         for line in cue.lines:
             new_lines.extend(_split_long_line(line, max_chars=limit_line_char, is_cjk=is_cjk))
-        # Do not truncate text. If reflowing creates > 2 lines, leave it unfixable
-        # if it can't fit in 3 lines either, we don't truncate text.
-        # Actually, standard is max 2 lines, but 3 lines is flagged. If we just created >3 lines, we cannot fix it easily.
-        # Let's just update if it fits in 2 or 3 lines. If it's > 3 lines, leave unchanged.
-        if len(new_lines) <= 3:
+        # Do not truncate text. If reflowing creates > 2 lines, leave it unfixable.
+        if len(new_lines) <= 2:
             cue_list[idx] = cue.model_copy(update={"lines": new_lines})
 
     elif rule == "three_line_cue":

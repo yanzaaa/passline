@@ -53,3 +53,6 @@ passline-mission07-plan.md
 .DS_Store
 *.swp
 *.swo
+passline-mission08-plan.md
+passline-mission09-plan.md
+test_*.py
