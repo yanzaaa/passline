@@ -10,7 +10,7 @@
       "defect_type": "auto-detected",
       "rule": "cps_exceeded",
       "threshold": 20.0,
-      "measured_value": 22.004889975550125,
+      "measured_value": 112.5,
       "severity": "ERROR",
       "category": "rule",
       "detail": "Rule cps_exceeded triggered"
@@ -26,24 +26,64 @@
       "detail": "Rule line_too_long triggered"
     },
     {
+      "cue_index": 2,
+      "defect_type": "auto-detected",
+      "rule": "sub_one_second",
+      "threshold": 1000.0,
+      "measured_value": 400.0,
+      "severity": "ERROR",
+      "category": "rule",
+      "detail": "Rule sub_one_second triggered"
+    },
+    {
       "cue_index": 4,
       "defect_type": "auto-detected",
       "rule": "cps_exceeded",
       "threshold": 20.0,
-      "measured_value": 22.003034901365705,
+      "measured_value": 145.0,
       "severity": "ERROR",
       "category": "rule",
       "detail": "Rule cps_exceeded triggered"
     },
     {
-      "cue_index": 7,
+      "cue_index": 4,
       "defect_type": "auto-detected",
-      "rule": "line_too_long",
-      "threshold": 42.0,
-      "measured_value": 54.0,
+      "rule": "sub_one_second",
+      "threshold": 1000.0,
+      "measured_value": 400.0,
       "severity": "ERROR",
       "category": "rule",
-      "detail": "Rule line_too_long triggered"
+      "detail": "Rule sub_one_second triggered"
+    },
+    {
+      "cue_index": 6,
+      "defect_type": "auto-detected",
+      "rule": "cps_exceeded",
+      "threshold": 20.0,
+      "measured_value": 52.5,
+      "severity": "ERROR",
+      "category": "rule",
+      "detail": "Rule cps_exceeded triggered"
+    },
+    {
+      "cue_index": 6,
+      "defect_type": "auto-detected",
+      "rule": "sub_one_second",
+      "threshold": 1000.0,
+      "measured_value": 400.0,
+      "severity": "ERROR",
+      "category": "rule",
+      "detail": "Rule sub_one_second triggered"
+    },
+    {
+      "cue_index": 8,
+      "defect_type": "auto-detected",
+      "rule": "cps_exceeded",
+      "threshold": 20.0,
+      "measured_value": 22.0,
+      "severity": "ERROR",
+      "category": "rule",
+      "detail": "Rule cps_exceeded triggered"
     },
     {
       "cue_index": 8,
@@ -56,24 +96,14 @@
       "detail": "Rule line_too_long triggered"
     },
     {
-      "cue_index": 9,
+      "cue_index": 10,
       "defect_type": "auto-detected",
       "rule": "cps_exceeded",
       "threshold": 20.0,
-      "measured_value": 85.0,
+      "measured_value": 107.5,
       "severity": "ERROR",
       "category": "rule",
       "detail": "Rule cps_exceeded triggered"
-    },
-    {
-      "cue_index": 9,
-      "defect_type": "auto-detected",
-      "rule": "sub_one_second",
-      "threshold": 1000.0,
-      "measured_value": 400.0,
-      "severity": "ERROR",
-      "category": "rule",
-      "detail": "Rule sub_one_second triggered"
     },
     {
       "cue_index": 10,
@@ -86,17 +116,7 @@
       "detail": "Rule line_too_long triggered"
     },
     {
-      "cue_index": 11,
-      "defect_type": "auto-detected",
-      "rule": "cps_exceeded",
-      "threshold": 20.0,
-      "measured_value": 55.0,
-      "severity": "ERROR",
-      "category": "rule",
-      "detail": "Rule cps_exceeded triggered"
-    },
-    {
-      "cue_index": 11,
+      "cue_index": 10,
       "defect_type": "auto-detected",
       "rule": "sub_one_second",
       "threshold": 1000.0,
@@ -106,24 +126,14 @@
       "detail": "Rule sub_one_second triggered"
     },
     {
-      "cue_index": 13,
+      "cue_index": 14,
       "defect_type": "auto-detected",
       "rule": "cps_exceeded",
       "threshold": 20.0,
-      "measured_value": 70.0,
+      "measured_value": 22.0,
       "severity": "ERROR",
       "category": "rule",
       "detail": "Rule cps_exceeded triggered"
-    },
-    {
-      "cue_index": 13,
-      "defect_type": "auto-detected",
-      "rule": "sub_one_second",
-      "threshold": 1000.0,
-      "measured_value": 400.0,
-      "severity": "ERROR",
-      "category": "rule",
-      "detail": "Rule sub_one_second triggered"
     }
   ]
 }
