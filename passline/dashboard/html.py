@@ -137,7 +137,7 @@ input[type=file]{display:none}
 
 /* ── Demo chips ──────────────────────────────────────────────────────── */
 /* OBJ-6: single-row, no-wrap chips */
-.demo-chips{display:flex;gap:8px;flex-wrap:nowrap;overflow-x:auto}
+.demo-chips{display:flex;gap:8px;flex-wrap:wrap;overflow-x:visible}
 /* OBJ-1: bump chip label size for legibility */
 .chip{
   padding:5px 12px;border-radius:20px;font-size:13px;font-weight:500;
