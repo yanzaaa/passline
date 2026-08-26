@@ -880,7 +880,7 @@ function markRepaired(ev) {
   }
 }
 
-function markCleared(ev) {
+async function markCleared(ev) {
   const s = deliveries[ev.delivery_id];
   if (!s) return;
   s.status = 'cleared';
