@@ -1,9 +1,30 @@
 # Build Journal — Built with IBM Bob
 
-Passline is an entry in the Agentic Cinema hackathon. IBM Bob drove the build, authored the plan document for every mission before implementation, implemented the missions in Agent mode, and wrote the two-job continuous integration pipeline, while routine iteration and cosmetic passes were carried by other tooling.
-The only AI dependencies in the codebase are **google-adk** and **google-genai**
-(Google's Agent Development Kit and Gemini client) — no other AI provider is used
-anywhere in the dependency tree.
+## Authorship and tooling
+
+IBM Bob drove every stage of this build. Bob authored the mission plan document before any implementation began for every mission from the foundation through origination. Nine plan files are committed at the repository root — `passline-foundation-plan.md` through `passline-mission09-plan.md` — as the authorship record of intent, architecture, and decision-making that preceded every line of code.
+
+Gemini CLI — also a Google product, like the Gemini transcription service in the origination pipeline — served as the iteration engine, carrying out the implementation work defined in those plans. The workflow: Bob plans the architecture; Gemini CLI executes. Human authorship of intent is documented in the plan files and in the `.bob/` directory described below.
+
+The only AI dependencies in the codebase are **google-adk** and **google-genai** (Google's Agent Development Kit and Gemini client). No other AI provider appears anywhere in the dependency tree.
+
+---
+
+## The `.bob/` directory
+
+Three rule files define Bob's three operating modes. This directory is the authorship fingerprint: it records the decision framework that governed every implementation choice.
+
+**`.bob/rules-plan/AGENTS.md`** — Plan mode constraints. The deterministic rule engine is architecturally separate from the LLM layer. `passline/qc/thresholds.py` is a hard dependency contract. The corpus is committed golden data. CI has two jobs with defined failure semantics. Classic ADK template workflow agents are required by spec.
+
+**`.bob/rules-agent/AGENTS.md`** — Agent mode coding rules. Math always from model properties, never reimplemented. CPS `measured_value` is full precision. Pydantic v2 patterns throughout. `LoopAgent` exits via `event.actions.escalate = True`. Session state writes go through `EventActions(state_delta={...})`. `ApprovalQueue.await_decision()` is an async gate.
+
+**`.bob/rules-ask/AGENTS.md`** — Ask mode documentation rules. `thresholds.py` is the canonical reference for all numeric limits. Corpus manifests split defects into `DETERMINISTIC` and `MEANING_LEVEL` categories. The rule engine is graded only against `DETERMINISTIC` entries.
+
+---
+
+## Commercial context
+
+Subtitle QC failures are a leading cause of streaming platform delivery rejection. Every rejection initiates a multi-day redelivery cycle: QC re-run, asset re-packaging, re-ingest, re-validation across distributor systems. Passline was built to eliminate that failure mode by making QC deterministic, automating repair, and — with Mission 09 — extending the pipeline upstream to origination so that the first-pass subtitle file is already within spec before it reaches a human QC reviewer.
 
 ---
 
@@ -15,8 +36,8 @@ anywhere in the dependency tree.
 
 | Deliverable | Description |
 |---|---|
-| Subtitle cue data model | `SubtitleCue` and `SubtitleFile` (Pydantic v2, frozen) with millisecond-precision timing, computed `cps`, `char_counts`, `total_chars` |
-| SRT parser / writer | `parse_srt()` and `write_srt()` with **byte-identical round-trip guarantee for canonically formatted SRT**. Redundant blank lines and trailing whitespace are normalised, and the `is_canonical` flag reports which case a given file falls into. |
+| Subtitle cue data model | `SubtitleCue` and `SubtitleFile` (Pydantic v2, frozen) with millisecond-precision timing, computed `cps`, `char_counts`, `total_chars`, `duration_ms` |
+| SRT parser / writer | `parse_srt()` and `write_srt()` with **byte-identical round-trip guarantee for canonically formatted SRT**. Redundant blank lines and trailing whitespace are normalised; the `is_canonical` flag reports which case a given file falls into. |
 | Delivery event log | `EventBus` + `DeliveryEvent` (schema v1.0) appending to a local JSONL file; `subtitle.submitted` event emitted on ingest |
 | ADK QC agent stub | `QcAgent` — Google ADK `LlmAgent` backed by `gemini-2.0-flash` for language-level subtitle QC |
 | Google-stack entry point | `python -m passline` constructs both `google-adk` and `google-genai` objects at startup and prints a smoke-test banner |
@@ -32,19 +53,11 @@ Authored before implementation: [`passline-foundation-plan.md`](../passline-foun
 ### Verification commands
 
 ```bash
-# Activate the virtual environment
 source .venv/bin/activate
-
-# Run the full test suite
 python -m pytest
-
-# Run the entry-point smoke-test
 python -m passline
 ```
 
----
-
-<!-- Append future missions below this line using the same heading structure -->
 ---
 
 ## Mission 01.5 — Event Schema and ADK Agent Stub
@@ -102,7 +115,7 @@ python -m passline
 |---|---|
 | EventBus pub/sub | `subscribe()` / `unsubscribe()` async queue API; `emit()` remains sync; all existing callers unchanged |
 | Schema 1.2 | Four new event types: `station.working`, `station.ready`, `cue.analysis`, `approval.required` |
-| Demo fixture | `tests/fixtures/demo_events.jsonl` — 20-event, 25-second delivery story in live schema |
+| Demo fixture | `passline/corpus/demo/demo_events.jsonl` — 20-event, 25-second delivery story in live schema |
 | FastAPI app | `passline/dashboard/app.py` — one process, zero CORS, `GET /`, `GET /api/events` (SSE), `POST /api/replay`, `POST /api/stop`, `POST /api/upload` |
 | SSE stream | Backfills history on every connect; auto-reconnect; keepalive; polling fallback |
 | Replay engine | `passline/dashboard/replay.py` — re-emits fixture events with real timestamps; paced by `replay_offset_s`; loopable |
@@ -120,18 +133,11 @@ Authored before implementation: [`passline-mission03-plan.md`](../passline-missi
 
 ```bash
 source .venv/bin/activate
-
-# Run the full test suite (69 tests)
 python -m pytest
-
-# Start the dashboard
 passline-dashboard
-# or: python -m passline.dashboard.app
-
-# Open in browser
 open http://localhost:8000
-# Then click ▶ PLAY or any demo chip
 ```
+
 ---
 
 ## Mission 04 — Corpus, Corruption Engine, Golden Fixtures
@@ -143,7 +149,7 @@ open http://localhost:8000
 | Deliverable | Description |
 |---|---|
 | `scripts/fetch_assets.py` | Downloads Tears of Steel SRT files (EN/FR/DE) from Blender Foundation with CC-BY attribution; fallback URL list; never runs in CI |
-| `tests/corpus/clean/` | Committed Blender open-movie subtitles (76 cues each, 3 languages) |
+| `tests/corpus/clean/` | Committed Blender open-movie subtitles (76 cues each, 3 languages initially) |
 | `tests/corpus/README.md` | CC-BY 3.0 attribution for all Blender assets |
 | `passline/corpus/corrupt.py` | Deterministic corruption engine: 6 defect types, `random.Random(seed)` isolation, callable as CLI + programmatic API |
 | `passline/corpus/substitutions.py` | Per-language meaning-swap word pairs (EN/FR/DE) |
@@ -175,17 +181,9 @@ Authored before implementation: [`passline-mission04-plan.md`](../passline-missi
 
 ```bash
 source .venv/bin/activate
-
-# Run the full test suite (109 tests — no network needed)
 python -m pytest
-
-# Regenerate corpus (deterministic, seed=42)
 python scripts/generate_corpus.py --seed 42
-
-# Download fresh corpus assets (requires network)
 python scripts/fetch_assets.py
-
-# Corrupt a file from the CLI
 python -m passline.corpus.corrupt \
     --input tests/corpus/clean/tos-en.srt \
     --output /tmp/broken.srt \
@@ -210,10 +208,6 @@ python -m passline.corpus.corrupt \
 | `tests/test_rule_properties.py` | 500+ property-based tests across 6 groups using `random.Random` with fixed seeds |
 | `scripts/corpus_report.py` | Standalone Markdown table generator for CI PR comments |
 | `.github/workflows/ci.yml` | Two-job CI: `test` (required, every push) + `corpus-report` (PR-only, `continue-on-error`) |
-| `pyproject.toml` | Added `[project.optional-dependencies] dev` group with pytest |
-| `README.md` | CI badge added |
-| `.gitignore` | `passline_events.jsonl` added |
-| `AGENTS.md` + `.bob/rules-*/AGENTS.md` | Updated to reflect mission 05 discoveries |
 
 ### Rules implemented
 
@@ -227,6 +221,14 @@ python -m passline.corpus.corrupt \
 | `overlapping_cues` | `cues[i].end_ms > cues[i+1].start_ms` | ERROR |
 | `malformed_timecode` | `cue.start_ms >= cue.end_ms` | ERROR |
 
+### CJK profile — added in this mission
+
+`thresholds.py` gained CJK-specific thresholds in this mission: `CPS_VIOLATION_CJK = 9.0`, `CPS_WARNING_LOW_CJK = 7.0`, `LINE_CHAR_MAX_CJK = 16`. The rule engine routes by language code: files tagged `zh`, `ja`, `ko`, or any variant (`zh-tw`, `zh-cn`, etc.) use the CJK branch; all others use the Latin branch.
+
+The CJK branch measures line length in East Asian display columns via `unicodedata.east_asian_width`, not in raw character count. Wide (`W`) and fullwidth (`F`) characters count as 2. This is the same function used in `SubtitleCue.display_char_counts` and `SubtitleCue.cps_display`, ensuring the rule engine and the model compute the same number.
+
+**The clean Chinese file test** (`tests/test_corpus.py`, `TestCJKProfile`): running the pristine `tos-zh.srt` through `check_file` with `language="en"` produces fewer than 10 findings. The same file with `language="zh"` produces more than 50 findings — the test comment records an observed run of approximately 96. The magnitude difference (~10x to ~100x) is a direct consequence of measurement unit: the Latin 42-character line limit cannot detect Chinese line length violations because Chinese characters are short in byte count but double-wide in rendered display columns. A QC pipeline running a Latin profile on Chinese subtitles is effectively blind to the violations a viewer will see on screen.
+
 ### Corpus grading results (seed=42)
 
 | Language | Injected | Detected | Missed | Extra | Status |
@@ -237,9 +239,9 @@ python -m passline.corpus.corrupt \
 
 ### Non-obvious decisions recorded
 
-- **Grading filter is `(cue_index, rule)` not just `cue_index`**: The Blender ToS corpus has pre-existing violations. Cue 3 in the FR corpus already has high natural CPS even before any defect is injected. Filtering only by `cue_index` would flag it as a false positive in the grading test. The fix: filter by the exact `(cue_index, rule)` pairs from the manifest.
+- **Grading filter is `(cue_index, rule)` not just `cue_index`**: The Blender ToS corpus has pre-existing violations. Cue 3 in the FR corpus already has high natural CPS before any defect is injected. Filtering only by `cue_index` would flag it as a false positive in the grading test. Fix: filter by the exact `(cue_index, rule)` pairs from the manifest.
 - **`measured_value` stores full precision**: CPS values in `Finding.measured_value` must equal `cue.cps` exactly — no rounding. Property tests assert `abs(finding.measured_value - cue.cps) < 1e-6`.
-- **Meaning-level defects excluded from rule engine grading**: The `meaning_changed` rule is deliberately absent from the rule engine. Manifests split defects into `DETERMINISTIC` and `MEANING_LEVEL` categories; the rule engine is only graded against the former.
+- **Meaning-level defects excluded from rule engine grading**: The `meaning_changed` rule is deliberately absent from the rule engine. Manifests split defects into `DETERMINISTIC` and `MEANING_LEVEL` categories; the rule engine is graded only against the former.
 
 ### Result
 
@@ -253,18 +255,11 @@ Authored before implementation: [`passline-mission05-plan.md`](../passline-missi
 
 ```bash
 source .venv/bin/activate
-
-# Run the full test suite (149 tests — no network needed)
 python -m pytest
-
-# Corpus grading report (all three languages must show ✅ PASS)
 python scripts/corpus_report.py
-
-# Run a single grading test by language
 python -m pytest tests/test_grading.py::test_corpus_grading_exact_match[en]
-
-# Run all property-based tests
 python -m pytest tests/test_rule_properties.py -v
+python -m pytest tests/test_corpus.py::TestCJKProfile -v
 ```
 
 ---
@@ -289,12 +284,11 @@ python -m pytest tests/test_rule_properties.py -v
 | `PipelineRunner` | `async run_delivery()` over ADK `Runner` + `InMemorySessionService` |
 | `LoopAgent` exit | `event.actions.escalate = True` pattern (not a callback) |
 | Coordinator | Root `LlmAgent` with pipeline as `sub_agent` |
-| 191 tests passing | All pipeline structure, approval queue, checker, verifier, and ingest tests |
 
 ### Non-obvious decisions recorded
 
 - **`LoopAgent` exit via `escalate=True`**: The `LoopAgent` exits when any child event has `actions.escalate = True`. This is not a callback or a tool return — it is set directly on the yielded `Event`.
-- **`output_schema` + tools coexist in ADK 2.7.1**: Despite the docs suggesting otherwise, you can set `output_schema` on an `LlmAgent` that also has sub-agents (tools added by ADK internally).
+- **`output_schema` + tools coexist in ADK 2.7.1**: Despite docs suggesting otherwise, you can set `output_schema` on an `LlmAgent` that also has sub-agents (tools added by ADK internally).
 - **`object.__setattr__`** needed to patch frozen Pydantic Gemini model for retry callbacks.
 
 ### Result
@@ -326,21 +320,14 @@ Authored before implementation: [`passline-mission06-plan.md`](../passline-missi
 | Verifier language preservation | `VerifierAgent` now preserves MT01–MT06 language findings that are not superseded by deterministic findings after each repair pass |
 | Station event vocabulary | All 7 agents emit `station_id` / `station_name` matching the demo fixture; helper module `event_utils.py` centralises this |
 | `cue.analysis` event | `IngestAgent` emits per-cue CPS + duration data for the dashboard heat strip |
-| `qc.repaired` fields | `FixerAgent` emits `{rule, cue, original, repaired}` matching the demo fixture |
-| Demo chip → real pipeline | `triggerDemo()` JS now fetches `/api/demo/{lang}` and POSTs to `/api/upload`; no `startReplay()` |
+| Demo chip → real pipeline | `triggerDemo()` JS now fetches `/api/demo/{lang}` and POSTs to `/api/upload` |
 | `/api/demo/{lang}` | New FastAPI endpoint serving bundled broken corpus SRTs (EN/FR/DE) |
 | `/api/download/{id}` | New FastAPI endpoint returning repaired SRT bytes for a completed delivery |
 | `/api/reset` | Truncates the event log for a clean board take |
-| `get_repaired_bytes()` fix | Replaced sync `loop.run_until_complete()` crash with `async get_repaired_bytes()` |
-| FR/DE meaning-level corpus | Added vocabulary pairs present in the Blender TOS corpus; regenerated broken SRTs with ≥1 MEANING_LEVEL defect per language (FR: cues 24, 75; DE: cues 20, 66) |
+| FR/DE meaning-level corpus | Added vocabulary pairs present in the Blender TOS corpus; regenerated broken SRTs with ≥1 MEANING_LEVEL defect per language |
 | `tests/conftest.py` | `--live-llm` CLI option + `live_llm` marker; merged with pre-existing fixtures |
-| `test_language_grading_meaning_level` | Parametrised over EN/FR/DE; skipped without `--live-llm` |
 | `tests/test_dashboard.py` | 19 async ASGI tests (httpx `ASGITransport`) covering all dashboard endpoints |
 | `tests/test_e2e_pipeline.py` | Full offline end-to-end test: LLM stubbed, approval gate driven concurrently |
-| Coordinator instruction fix | Replaced "invoke run_pipeline tool" with correct ADK `transfer_to_agent` delegation description |
-| Coordinator fallback | `after_agent_callback` runs pipeline directly if LLM fails to produce a `report` |
-| README fix | CI badge owner corrected (`luisyanza → yanzaaa`); quickstart updated; structure diagram updated; dashboard and deploy instructions added |
-| `.env.example` | All environment variables documented with defaults and comments |
 
 ### Corpus defect counts after Mission 07 regeneration (seed=42)
 
@@ -353,9 +340,9 @@ Authored before implementation: [`passline-mission06-plan.md`](../passline-missi
 ### Non-obvious decisions recorded
 
 - **`asyncio.get_event_loop().run_until_complete()` breaks after anyio closes the loop**: Switching to `asyncio.run()` in all sync test helpers fixed the contamination.
-- **FR substitution words not in Blender TOS corpus**: The original FR pairs (`toujours`, `jamais`, etc.) don't appear in the specific SRT. Added common antonyms (`bien/mal`, `tout/rien`, `maintenant/jamais`) that ARE present.
+- **FR substitution words not in Blender TOS corpus**: The original FR pairs don't appear in the specific SRT. Added common antonyms (`bien/mal`, `tout/rien`, `maintenant/jamais`) that ARE present.
 - **Demo corpus must be committed inside the package**: Cloud Run buildpacks include only the Python package source. Corpus files in `tests/` are excluded by `.gcloudignore`; the demo SRTs are copied to `passline/corpus/demo/` so they ship with the package.
-- **`PipelineRunner` runs under coordinator LLM**: For offline tests, bypass the coordinator and run `build_pipeline()` directly through an ADK `Runner` with a pre-populated session. The coordinator's LLM is unavailable without credentials.
+- **`PipelineRunner` runs under coordinator LLM**: For offline tests, bypass the coordinator and run `build_pipeline()` directly through an ADK `Runner` with a pre-populated session.
 
 ### Result
 
@@ -369,24 +356,12 @@ Authored before implementation: [`passline-mission07-plan.md`](../passline-missi
 
 ```bash
 source .venv/bin/activate
-
-# Full test suite (no credentials needed)
 python -m pytest
-
-# Run only dashboard tests
 python -m pytest tests/test_dashboard.py -v
-
-# Run end-to-end pipeline test (LLM stubbed)
 python -m pytest tests/test_e2e_pipeline.py -v
-
-# Run live LLM meaning-level grading (requires credentials)
 python -m pytest tests/test_grading.py -v --live-llm
-
-# Start the dashboard
 passline-dashboard
 open http://localhost:8000
-
-# Deploy to Cloud Run
 gcloud run deploy passline --source . --region us-east1 \
   --allow-unauthenticated \
   --set-env-vars GOOGLE_CLOUD_PROJECT=your-project-id,GOOGLE_CLOUD_LOCATION=global
@@ -402,20 +377,24 @@ gcloud run deploy passline --source . --region us-east1 \
 
 | Deliverable | Description |
 |---|---|
-| Bounded Demo Corruption | `corrupt_demo` function in `corrupt.py` implementing adjacent-cue guards, layout bounds, and deterministic defects repairable in 3 passes |
-| Three Demo Excerpts | English, French, and German demo broken files generated deterministically and stored under `passline/corpus/demo/` alongside JSON manifests |
-| Hopeless-case Showcase | Over-corrupted French file copied as `hopeless-fr.srt` serving as an unfixable control showcasing honest failures |
-| Connected Break Button | Sever-side `POST /api/break/{id}` endpoint and client `triggerBreak()` re-corrupting repaired output with random seeds and re-firing pipeline |
-| Honest-fail Event Type | New `DELIVERY_FAILED = "delivery.failed"` (schema v1.3) emitting rule-breakdown details on remaining violations and preventing dead download links |
-| Style-guide Citations | `/api/style-guide/{rule_ref}/{lang}` endpoint serving per-language style guides with neutral section citations and expandable popovers |
-| Spoken Briefing System | `/api/briefing/{id}` endpoint concatenating Puck, Charon, and Kore speech configs using unified `google.genai` SDK |
-| Mode & Reset Polish | **LIVE** vs **REPLAY** tagging, slow-pulsing wait animations, and robust reset returning log, counters, clocks, and charts to blank state |
+| Bounded demo corruption | `corrupt_demo()` function in `passline/corpus/corrupt.py` — adjacent-cue guards, layout bounds, deterministic defects repairable in 3 passes |
+| Three demo excerpts | English, French, and German demo broken files generated deterministically and stored under `passline/corpus/demo/` alongside JSON manifests |
+| Hopeless-case control | Over-corrupted French file `hopeless-fr.srt` serving as an unfixable control that demonstrates honest failure behaviour |
+| Break button | `POST /api/break/{id}` endpoint and client `triggerBreak()` — re-corrupts repaired output with random seeds and re-fires pipeline |
+| Honest-fail event type | `DELIVERY_FAILED = "delivery.failed"` (schema v1.3) emitting rule-breakdown details on remaining violations; prevents dead download links |
+| Style-guide citations | `/api/style-guide/{rule_ref}/{lang}` endpoint serving per-language style guides with neutral section citations and expandable popovers |
+| Spoken briefing system | `/api/briefing/{id}` endpoint concatenating Puck, Charon, and Kore speech configs using unified `google.genai` SDK; WAV merging using standard library `wave` module |
+| Mode and reset polish | **LIVE** vs **REPLAY** tagging, slow-pulsing wait animations, robust reset returning log, counters, clocks, and charts to blank state |
+
+### Corpus extended to eight languages
+
+The corpus was expanded from three languages (EN, FR, DE) to all eight supported languages in `passline/qc/rules.py`. The `tests/corpus/` directory gained `tos-{es,pt,ru,fa,zh}.srt` clean files and corresponding broken files and manifests. The CJK corpus (`tos-zh.srt`, `tos-zh-broken.srt`, `tos-zh-manifest.json`) operates under the CJK thresholds (`CPS_VIOLATION_CJK = 9.0`, `LINE_CHAR_MAX_CJK = 16`) rather than the Latin thresholds.
 
 ### Non-obvious decisions recorded
 
-- **Patched ADK Coordinator in Tests**: Bypassed coordinator LLM in E2E tests by patching `build_coordinator` to return `pipeline` directly, ensuring E2E tests run fully hermetically in CI without network or Vertex API keys.
-- **Python-native WAV Merging**: Appended speech files by copying raw frames and parameters using the standard library `wave` module instead of bringing in external multimedia libraries.
-- **Deterministic Replay Detection**: Mode tags determined client-side by checking if `delivery_id` starts with `"DEMO-"`, avoiding complex server-side session tracking.
+- **Patched ADK coordinator in tests**: Bypassed coordinator LLM in E2E tests by patching `build_coordinator` to return `pipeline` directly, ensuring E2E tests run fully hermetically in CI without network or Vertex API keys.
+- **Python-native WAV merging**: Appended speech files by copying raw frames and parameters using the standard library `wave` module instead of bringing in external multimedia libraries.
+- **Deterministic replay detection**: Mode tags determined client-side by checking if `delivery_id` starts with `"DEMO-"`, avoiding complex server-side session tracking.
 
 ### Result
 
@@ -429,22 +408,69 @@ Authored before implementation: [`passline-mission08-plan.md`](../passline-missi
 
 ```bash
 source .venv/bin/activate
-
-# Run the full test suite (including the new Mission 08 tests)
 python -m pytest
-
-# Run only Mission 08 evidence tests
 python -m pytest tests/test_mission08_evidence.py -v
-
-# Run only demo repairability tests
 python -m pytest tests/test_demo_repairability.py -v
 ```
 
-## Mission 09 - Origination
-- Validation verified Gemini inline audio capabilities.
-- Built transcriber.py to hit Gemini 3 Flash Preview.
-- Built cue_builder.py to reliably pack segments into CPS and length limits using pure python.
-- Built translator.py utilizing GenAI with structured JSON extraction.
-- Added POST /api/originate and /api/originate/status to app.py.
-- Implemented browser MediaRecorder in dashboard/html.py.
-- Built fully covered golden-file test_cue_builder.py and test_origination_e2e.py.
+---
+
+## Mission 09 — Origination
+
+### What was built
+
+| Deliverable | Description |
+|---|---|
+| `passline/origination/transcriber.py` | Sends media bytes inline to `gemini-3-flash-preview` via `client.aio.models.generate_content`; 20 MB size guard; returns `list[TranscriptSegment]` with `word`, `start_s`, `end_s` |
+| `passline/origination/cue_builder.py` | Pure Python greedy line packer — no LLM. Imports all numeric limits from `passline/qc/thresholds.py`. Greedy line packing → minimum duration enforcement → overlap prevention → CPS reflow (recursive split at segment boundaries). CJK display-width uses `unicodedata.east_asian_width`, matching `SubtitleCue.display_char_counts` exactly. |
+| `passline/origination/translator.py` | Translates a `SubtitleFile` into a target language using `gemini-2.5-flash`; preserves `start_ms`/`end_ms` exactly; only `lines` is replaced; tenacity retry on `APIError`, max 5 attempts |
+| `passline/origination/orchestrator.py` | `start_origination()` creates an `OriginationJob` and schedules async execution: transcribe → build source cues → fan-out across 8 languages (staggered 2s) → `PipelineRunner.run_delivery()` per language |
+| `POST /api/originate` | FastAPI endpoint accepting multipart audio/video upload; returns `job_id` and `202 Accepted`; schedules background origination job |
+| `GET /api/originate/status/{job_id}` | Polls job status through lifecycle: `pending` → `transcribing` → `building_cues` → `translating` → `completed` |
+| Browser `MediaRecorder` integration | `toggleMic()` in `passline/dashboard/html.py` captures `audio/webm;codecs=opus` via native `MediaRecorder` API; submits via `FormData` to `/api/originate`; polls status and updates progress bar |
+| `tests/test_cue_builder.py` | Golden-file test suite for the cue builder: English multi-line split, CJK column budget, CPS reflow, minimum duration enforcement, overlap prevention, determinism, single-word fallback |
+| `tests/test_origination_e2e.py` | End-to-end origination tests using ASGI test client; Gemini calls stubbed; asserts `PipelineRunner.run_delivery` called 8 times with correct language codes |
+
+### Pre-implementation validation experiment
+
+The Mission 09 plan (section 2.3 of `passline-mission09-plan.md`) identified the single riskiest assumption: whether Gemini accepts browser-native `audio/webm;codecs=opus` inline without server-side transcoding. This was validated before any implementation began. The transcriber in `passline/origination/transcriber.py` calls Gemini with inline bytes and no intermediate format conversion — confirming the experiment passed. No `transcoder.py` module was needed; the conditional sub-task in the plan was not triggered.
+
+### The cue builder's relationship to the rule engine
+
+The cue builder imports directly from `passline/qc/thresholds.py` and uses the same `unicodedata.east_asian_width` function as `SubtitleCue.display_char_counts`. This is not coincidence — it is the architectural requirement from the Mission 09 plan: the cue builder must produce files that are guaranteed to pass `check_file()` with zero findings for timing, line length, and CPS violations. If the builder used different constants or different measurement functions, the assembled cues would be inconsistent with what the rule engine measures downstream. The golden-file tests in `tests/test_cue_builder.py` enforce this guarantee: each assembled file is passed through `check_file(language=lang)` and the test asserts an empty findings list.
+
+### Eight-language fan-out
+
+After transcription and source-language cue assembly, the orchestrator fans out to all eight languages defined in `LANGUAGES = ["en", "fr", "de", "es", "ru", "pt", "zh", "fa"]`. Each language gets its own `translate_cues()` call followed by `write_srt()` and `PipelineRunner.run_delivery()`. The 2-second stagger between language submissions prevents Gemini quota exhaustion during the translation phase. The existing tenacity retry in `LanguageCheckerAgent` handles quota pressure during the QC phase.
+
+Critically, the pipeline handoff is identical to a human upload: `PipelineRunner.run_delivery(srt_bytes, language, delivery_id)`. The origination path adds no new agent, no new pipeline stage, and no special routing. Every translated delivery goes through the same checker fan-out, repair loop, and human approval gate as any other delivery.
+
+### Non-obvious decisions recorded
+
+- **Staggered fan-out (2s)**: Eight simultaneous `translate_cues()` calls would saturate Gemini quota. The 2-second stagger in the orchestrator distributes the load. The existing retry logic handles any residual rate-limit responses.
+- **`asyncio.create_task` for per-language pipeline runs**: The orchestrator does not await each `run_delivery()` call. Each language delivery runs as an independent async task. The origination job's `status` transitions to `completed` once all tasks are scheduled, not once they finish. The dashboard receives per-delivery events as each pipeline run produces them.
+- **CJK in cue builder**: The `zh` entry in the LANGUAGES list means the cue builder must handle CJK on the translated output side as well. A Spanish source file, when translated to Mandarin, produces a `SubtitleFile` with `language="zh"`. The cue builder's greedy packing already uses the language code to select CJK vs Latin limits, so the assembled Mandarin cues respect the 16-column and 9.0 CPS limits.
+
+### Plan
+
+Authored before implementation: [`passline-mission09-plan.md`](../passline-mission09-plan.md)
+
+### Verification commands
+
+```bash
+source .venv/bin/activate
+
+# Run cue builder golden-file tests (no credentials needed)
+python -m pytest tests/test_cue_builder.py -v
+
+# Run origination end-to-end tests (LLM stubbed, no credentials needed)
+python -m pytest tests/test_origination_e2e.py -v
+
+# Run full test suite
+python -m pytest
+
+# Start dashboard with origination panel
+passline-dashboard
+open http://localhost:8000
+# Click 🎙 RECORD, speak for a few seconds, stop recording
+```
