@@ -841,6 +841,7 @@ function addDeliveryCard(ev) {
     <div class="progress-bar"><div class="progress-fill" id="prog-${CSS.escape(ev.delivery_id)}"></div></div>
     <div class="video-preview" id="vid-container-${CSS.escape(ev.delivery_id)}" style="display:none; margin-top:12px; border:1px solid var(--border); border-radius:var(--r); overflow:hidden; background:#000;">
       <video id="vid-${CSS.escape(ev.delivery_id)}" src="/static/tos-excerpt.mp4" controls crossorigin playsinline preload="none" style="width:100%; display:block;"></video>
+      <div style="font-size:9px; color:#888; padding:4px; text-align:right;">Clip from <em>Tears of Steel</em> by Blender Foundation (CC BY 3.0). Trimmed from original.</div>
     </div>
   `;
   document.getElementById('delivery-cards').prepend(el);
