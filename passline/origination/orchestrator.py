@@ -35,10 +35,17 @@ class OriginationJob:
             source_cues = build_cues(segments, language=source_language)
             
             self.status = "translating"
+            sem = asyncio.Semaphore(3)
+            
+            async def _run_with_sem(lang):
+                async with sem:
+                    await self._process_language(lang, source_cues, client)
+                    
+            tasks = []
             for lang in LANGUAGES:
-                await asyncio.sleep(2) # stagger
-                asyncio.create_task(self._process_language(lang, source_cues, client))
-                
+                tasks.append(asyncio.create_task(_run_with_sem(lang)))
+            
+            await asyncio.gather(*tasks)
             self.status = "completed"
         except Exception as e:
             logger.exception("Origination job failed")

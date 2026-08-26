@@ -131,15 +131,20 @@ class PipelineRunner:
         runner = self._build_runner(is_demo=is_demo)
 
         try:
-            async for _ev in runner.run_async(
-                user_id="pipeline",
-                session_id=session_id,
-                new_message=types.Content(
-                    role="user",
-                    parts=[types.Part(text=f"Process subtitle file for delivery {delivery_id}")],
-                ),
-            ):
-                pass  # Events reach the dashboard via the bus; we drain the ADK stream
+            async def run_it():
+                async for _ev in runner.run_async(
+                    user_id="pipeline",
+                    session_id=session_id,
+                    new_message=types.Content(
+                        role="user",
+                        parts=[types.Part(text=f"Process subtitle file for delivery {delivery_id}")],
+                    ),
+                ):
+                    pass  # Events reach the dashboard via the bus; we drain the ADK stream
+            import asyncio
+            import os
+            timeout_s = float(os.getenv("PASSLINE_PIPELINE_TIMEOUT", "240.0"))
+            await asyncio.wait_for(run_it(), timeout=timeout_s)
 
         except Exception as exc:
             import traceback
