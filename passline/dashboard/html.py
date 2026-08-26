@@ -409,6 +409,7 @@ input[type=file]{display:none}
 .diff-text{font-family:var(--mono);font-size:14px;color:var(--text);line-height:1.5;
   min-height:48px}
 
+button:focus, .chip:focus { outline: 2px solid var(--blue); outline-offset: 2px; }
 /* ── Video Preview ─────────────────────────────────────────────────────── */
 video { outline: none; }
 ::cue { font-family: var(--font); font-size: 16px; background: rgba(0,0,0,0.8); color: white; }
@@ -536,15 +537,15 @@ video { outline: none; }
     <div class="card" style="padding:10px 14px">
       <div style="font-size:10px;color:var(--muted);font-weight:600;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">Test Corpora & Demos</div>
       <div class="demo-chips">
-        <div class="chip" onclick="triggerDemo('demo-en','en-US')">English</div>
-        <div class="chip" onclick="triggerDemo('demo-fr','fr-FR')">French</div>
-        <div class="chip" onclick="triggerDemo('demo-de','de-DE')">German</div>
-        <div class="chip" onclick="triggerDemo('demo-es','es-ES')">Spanish</div>
-        <div class="chip" onclick="triggerDemo('demo-ru','ru-RU')">Russian</div>
-        <div class="chip" onclick="triggerDemo('demo-pt','pt-BR')">Portuguese</div>
-        <div class="chip" onclick="triggerDemo('demo-zh','zh-CN')">Chinese</div>
-        <div class="chip" onclick="triggerDemo('demo-fa','fa-IR')">Persian</div>
-        <div class="chip chip-hazard" onclick="triggerDemo('hopeless','fr-FR')">Hopeless Case</div>
+        <div class="chip" role="button" tabindex="0" onclick="triggerDemo('demo-en','en-US')" onkeydown="if(event.key==='Enter') triggerDemo('demo-en','en-US')">English</div>
+        <div class="chip" role="button" tabindex="0" onclick="triggerDemo('demo-fr','fr-FR')" onkeydown="if(event.key==='Enter') triggerDemo('demo-fr','fr-FR')">French</div>
+        <div class="chip" role="button" tabindex="0" onclick="triggerDemo('demo-de','de-DE')" onkeydown="if(event.key==='Enter') triggerDemo('demo-de','de-DE')">German</div>
+        <div class="chip" role="button" tabindex="0" onclick="triggerDemo('demo-es','es-ES')" onkeydown="if(event.key==='Enter') triggerDemo('demo-es','es-ES')">Spanish</div>
+        <div class="chip" role="button" tabindex="0" onclick="triggerDemo('demo-ru','ru-RU')" onkeydown="if(event.key==='Enter') triggerDemo('demo-ru','ru-RU')">Russian</div>
+        <div class="chip" role="button" tabindex="0" onclick="triggerDemo('demo-pt','pt-BR')" onkeydown="if(event.key==='Enter') triggerDemo('demo-pt','pt-BR')">Portuguese</div>
+        <div class="chip" role="button" tabindex="0" onclick="triggerDemo('demo-zh','zh-CN')" onkeydown="if(event.key==='Enter') triggerDemo('demo-zh','zh-CN')">Chinese</div>
+        <div class="chip" role="button" tabindex="0" onclick="triggerDemo('demo-fa','fa-IR')" onkeydown="if(event.key==='Enter') triggerDemo('demo-fa','fa-IR')">Persian</div>
+        <div class="chip chip-hazard" role="button" tabindex="0" onclick="triggerDemo('hopeless','fr-FR')" onkeydown="if(event.key==='Enter') triggerDemo('hopeless','fr-FR')">Hopeless Case</div>
       </div>
     </div>
 
