@@ -89,7 +89,8 @@ def check_file(
 
     limit_cps_violation = CPS_VIOLATION_CJK if is_cjk else CPS_VIOLATION
     limit_cps_warning = CPS_WARNING_LOW_CJK if is_cjk else CPS_WARNING_LOW
-    limit_line_char = LINE_CHAR_MAX_CJK if is_cjk else LINE_CHAR_MAX
+    from passline.qc.thresholds import LINE_CHAR_MAX_OVERRIDES
+    limit_line_char = LINE_CHAR_MAX_CJK if is_cjk else LINE_CHAR_MAX_OVERRIDES.get(resolved_language.lower(), LINE_CHAR_MAX)
 
     for i, cue in enumerate(cues):
 

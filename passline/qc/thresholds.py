@@ -15,6 +15,9 @@ CPS_WARNING_LOW_CJK: float = 7.0
 
 # Line length
 LINE_CHAR_MAX: int = 42            # chars > this → ERROR (line_too_long)
+LINE_CHAR_MAX_OVERRIDES: dict[str, int] = {
+    "ru": 39,
+}
 LINE_CHAR_MAX_CJK: int = 16        # full-width chars > this → ERROR
 
 # Lines per cue
