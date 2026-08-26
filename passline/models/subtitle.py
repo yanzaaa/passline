@@ -46,6 +46,9 @@ class SrtDialect(BaseModel):
     has_bom: bool = False
     """True if the source file began with a UTF-8 byte-order mark."""
 
+    encoding: str = "utf-8"
+    """The encoding detected during parsing (e.g. utf-8, cp1252)."""
+
     crlf: bool = False
     """True if the source file used CRLF line endings."""
 

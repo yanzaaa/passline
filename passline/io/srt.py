@@ -95,8 +95,8 @@ def write_srt(subtitle_file: SubtitleFile) -> bytes:
     else:
         body += eol
 
-    result = body.encode("utf-8")
-    if dialect.has_bom:
+    result = body.encode(dialect.encoding)
+    if dialect.has_bom and dialect.encoding.lower() in ("utf-8", "utf8"):
         result = _BOM + result
 
     return result
@@ -138,15 +138,41 @@ def parse_srt(
     anomalies: list[str] = []
     skipped = 0
 
-    # ── 1. Strip BOM ──────────────────────────────────────────────────────────
+    # ── 1. Detect Encoding and BOM ────────────────────────────────────────────
     has_bom = data.startswith(_BOM)
+    encoding = "utf-8"
+    text = ""
+    
     if has_bom:
-        data = data[len(_BOM):]
+        try:
+            text = data[len(_BOM):].decode("utf-8")
+            encoding = "utf-8"
+        except UnicodeDecodeError:
+            # Revert has_bom if it failed to decode as utf-8
+            has_bom = False
+
+    if not text:
+        try:
+            text = data.decode("utf-8")
+            encoding = "utf-8"
+        except UnicodeDecodeError:
+            try:
+                text = data.decode("cp1252")
+                encoding = "cp1252"
+                anomalies.append("File parsed as cp1252 instead of utf-8")
+            except UnicodeDecodeError:
+                raise ValueError("Could not decode file as utf-8 or cp1252")
+                
+    if "\x00" in text:
+        raise ValueError("Null bytes detected, unsupported encoding (likely utf-16) or binary file")
 
     # ── 2. Detect line endings ────────────────────────────────────────────────
-    crlf_count = data.count(b"\r\n")
+    # It's easier to detect line endings on bytes or text. We'll stick to original logic using bytes, 
+    # but excluding BOM.
+    raw_for_crlf = data[len(_BOM):] if has_bom else data
+    crlf_count = raw_for_crlf.count(b"\r\n")
     # Count bare \n that are NOT preceded by \r
-    lf_only_count = len(re.findall(b"(?<!\r)\n", data))
+    lf_only_count = len(re.findall(b"(?<!\r)\n", raw_for_crlf))
 
     if crlf_count > 0 and lf_only_count > 0:
         anomalies.append(
@@ -158,7 +184,6 @@ def parse_srt(
         crlf = crlf_count > 0
 
     # ── 3. Normalise to LF for parsing ────────────────────────────────────────
-    text = data.decode("utf-8")
     if "\r\n" in text:
         text = text.replace("\r\n", "\n")
 
@@ -194,7 +219,7 @@ def parse_srt(
     blocks = [b.strip("\n") for b in text.split("\n\n")]
     blocks = [b for b in blocks if b.strip()]
 
-    dialect = SrtDialect(has_bom=has_bom, crlf=crlf, trailing_blank=trailing_blank)
+    dialect = SrtDialect(has_bom=has_bom, encoding=encoding, crlf=crlf, trailing_blank=trailing_blank)
 
     # ── 6. Parse each cue block ───────────────────────────────────────────────
     raw_cues: list[tuple[int | None, int, int, list[str], str]] = []
