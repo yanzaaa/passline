@@ -146,7 +146,7 @@ class PipelineRunner:
             traceback.print_exc()
             log.error("PipelineRunner: delivery %s failed — %s", delivery_id, exc)
             self._bus.emit(DeliveryEvent(
-                event_type=EventType.QC_VIOLATION,
+                event_type=EventType.DELIVERY_FAILED,
                 delivery_id=delivery_id,
                 language=language,
                 details={"verdict": "error", "error": str(exc)},
