@@ -25,9 +25,9 @@ class OriginationJob:
         self.status = "pending"
         self.error = None
         
-    async def run(self, media_bytes: bytes, mime_type: str, source_language: str):
+    async def run(self, media_bytes: bytes, mime_type: str, source_language: str, client: Client | None = None):
         self.status = "transcribing"
-        client = Client()
+        client = client or Client()
         try:
             segments = await transcribe_media(media_bytes, mime_type, client)
             self.status = "building_cues"
@@ -58,12 +58,50 @@ class OriginationJob:
             srt_bytes = write_srt(translated)
             delivery_id = str(uuid.uuid4())
             runner = PipelineRunner(bus=self.bus, approval_queue=_approval_queue)
-            await runner.run_delivery(
-                srt_bytes=srt_bytes,
-                language=lang,
-                delivery_id=delivery_id,
-                parent_id=self.job_id
-            )
+            
+            import os
+            import asyncio
+            from passline.events.bus import DeliveryEvent, EventType
+            
+            timeout_s = float(os.getenv("PASSLINE_PIPELINE_TIMEOUT", "240.0"))
+            try:
+                await asyncio.wait_for(
+                    runner.run_delivery(
+                        srt_bytes=srt_bytes,
+                        language=lang,
+                        delivery_id=delivery_id,
+                        parent_id=self.job_id
+                    ),
+                    timeout=timeout_s
+                )
+            except asyncio.TimeoutError:
+                logger.error(f"Delivery {delivery_id} for {lang} timed out in orchestrator")
+                session_id = f"delivery-{delivery_id}"
+                session = await runner._session_service.get_session(
+                    app_name="passline",
+                    user_id="pipeline",
+                    session_id=session_id,
+                )
+                all_findings = []
+                if session:
+                    all_findings = session.state.get("all_findings", [])
+                report = {
+                    "delivery_id": delivery_id,
+                    "language": lang,
+                    "verdict": "failed",
+                    "error": "timeout",
+                    "violations_found": {
+                        "remaining_after_repair": len(all_findings),
+                    },
+                    "all_findings": all_findings,
+                }
+                self.bus.emit(DeliveryEvent(
+                    event_type=EventType.DELIVERY_FAILED,
+                    delivery_id=delivery_id,
+                    language=lang,
+                    details=report,
+                ))
+
         except Exception as e:
             logger.exception(f"Failed to process language {lang}")
 

@@ -131,48 +131,16 @@ class PipelineRunner:
         runner = self._build_runner(is_demo=is_demo)
 
         try:
-            async def run_it():
-                async for _ev in runner.run_async(
-                    user_id="pipeline",
-                    session_id=session_id,
-                    new_message=types.Content(
-                        role="user",
-                        parts=[types.Part(text=f"Process subtitle file for delivery {delivery_id}")],
-                    ),
-                ):
-                    pass  # Events reach the dashboard via the bus; we drain the ADK stream
-            import asyncio
-            import os
-            timeout_s = float(os.getenv("PASSLINE_PIPELINE_TIMEOUT", "240.0"))
-            await asyncio.wait_for(run_it(), timeout=timeout_s)
-
-        except asyncio.TimeoutError:
-            log.error("PipelineRunner: delivery %s timed out", delivery_id)
-            session = await self._session_service.get_session(
-                app_name=_APP_NAME,
+            async for _ev in runner.run_async(
                 user_id="pipeline",
                 session_id=session_id,
-            )
-            all_findings = []
-            if session:
-                all_findings = session.state.get("all_findings", [])
-            report = {
-                "delivery_id": delivery_id,
-                "language": language,
-                "verdict": "failed",
-                "error": "timeout",
-                "violations_found": {
-                    "remaining_after_repair": len(all_findings),
-                },
-                "all_findings": all_findings,
-            }
-            self._bus.emit(DeliveryEvent(
-                event_type=EventType.DELIVERY_FAILED,
-                delivery_id=delivery_id,
-                language=language,
-                details=report,
-            ))
-            return report
+                new_message=types.Content(
+                    role="user",
+                    parts=[types.Part(text=f"Process subtitle file for delivery {delivery_id}")],
+                ),
+            ):
+                pass  # Events reach the dashboard via the bus; we drain the ADK stream
+
         except Exception as exc:
             import traceback
             traceback.print_exc()
