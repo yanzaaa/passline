@@ -51,9 +51,15 @@ def test_originate_submits_and_handoff_language(mock_run, mock_translate, mock_t
     
     response = client.post("/api/originate", data={"source_language": "en"}, files={"file": ("test.webm", b"hello", "audio/webm")})
     assert response.status_code == 202
+    job_id = response.json()["job_id"]
     
     import time
-    time.sleep(0.5)
+    for _ in range(50):
+        res = client.get(f"/api/originate/status/{job_id}")
+        if res.json()["status"] in ("completed", "failed"):
+            break
+        time.sleep(0.1)
+        
     assert mock_run.call_count == 8
     languages = [call.kwargs["language"] for call in mock_run.call_args_list]
     assert set(languages) == set(["en", "fr", "de", "es", "ru", "pt", "zh", "fa"])

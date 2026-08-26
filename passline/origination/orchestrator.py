@@ -23,6 +23,7 @@ class OriginationJob:
         self.job_id = job_id
         self.bus = bus
         self.status = "pending"
+        self.error = None
         
     async def run(self, media_bytes: bytes, mime_type: str, source_language: str):
         self.status = "transcribing"
@@ -42,6 +43,7 @@ class OriginationJob:
         except Exception as e:
             logger.exception("Origination job failed")
             self.status = "failed"
+            self.error = str(e)
             
     async def _process_language(self, lang: str, source_cues, client):
         try:
@@ -71,8 +73,8 @@ def start_origination(media_bytes: bytes, mime_type: str, source_language: str, 
     TASKS[job_id] = asyncio.create_task(job.run(media_bytes, mime_type, source_language))
     return job_id
 
-def get_job_status(job_id: str) -> str | None:
+def get_job_status(job_id: str) -> dict | None:
     job = JOBS.get(job_id)
     if not job:
         return None
-    return job.status
+    return {"status": job.status, "error": job.error}

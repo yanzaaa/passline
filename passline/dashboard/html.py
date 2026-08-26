@@ -1565,7 +1565,7 @@ async function pollOrigination() {
         setTimeout(() => originationCont.classList.remove('active'), 3000);
       } else if (st === 'failed') {
         clearInterval(originationTimer);
-        originationStatusText.textContent = 'Processing failed.';
+        originationStatusText.textContent = data.error || 'Processing failed.';
         originationStatus.classList.add('error');
         const spinner = document.querySelector('.origination-spinner');
         if (spinner) spinner.style.display = 'none';

@@ -532,7 +532,7 @@ async def api_originate(request: Request):
 @app.get("/api/originate/status/{job_id}")
 async def api_originate_status(job_id: str):
     from passline.origination.orchestrator import get_job_status
-    status = get_job_status(job_id)
-    if not status:
+    job_info = get_job_status(job_id)
+    if not job_info:
         raise HTTPException(status_code=404, detail="Job not found")
-    return {"status": status}
+    return job_info

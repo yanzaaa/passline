@@ -1,6 +1,6 @@
 import json
 from passline.origination.cue_builder import TranscriptSegment
-from google.genai import Client
+from google.genai import Client, types
 
 class TranscriptionError(Exception):
     pass
@@ -14,7 +14,7 @@ async def transcribe_media(media_bytes: bytes, mime_type: str, client: Client) -
     response = await client.aio.models.generate_content(
         model="gemini-3-flash-preview",
         contents=[
-            {"mime_type": mime_type, "data": media_bytes},
+            types.Part.from_bytes(data=media_bytes, mime_type=mime_type),
             prompt
         ],
         config={
