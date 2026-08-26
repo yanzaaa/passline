@@ -475,12 +475,12 @@ class FixerAgent(LlmAgent):
                 ))
                 unresolved_findings.append(finding)
 
-        # Await decisions sequentially (human responds one by one)
-        for item, finding, original_text, proposed_text, rule_ref in pending_items:
-            cue_index = finding.get("cue_index", 0)
-            rule = finding.get("rule", "")
+        # Await decisions concurrently with a single shared timeout
+        timeout_val = float(os.getenv("PASSLINE_APPROVAL_TIMEOUT", "120.0"))
+        
+        async def _wait_for_one(item_info):
+            item, finding, original_text, proposed_text, rule_ref = item_info
             try:
-                timeout_val = float(os.getenv("PASSLINE_APPROVAL_TIMEOUT", "120.0"))
                 decision = await asyncio.wait_for(
                     self.approval_queue.await_decision(item.item_id),
                     timeout=timeout_val
@@ -494,42 +494,48 @@ class FixerAgent(LlmAgent):
                     language=language,
                     details={"reason": "No human decision was made"}
                 ))
-
-            if decision == "approved":
-                new_lines = proposed_text.split("\n")
-                idx = next((i for i, c in enumerate(cues) if c.index == cue_index), None)
-                if idx is not None:
-                    cues[idx] = cues[idx].model_copy(update={"lines": new_lines})
-                repair_entry = {
-                    "rule": rule,
-                    "rule_ref": rule_ref,
-                    "cue": cue_index,
-                    "cue_index": cue_index,
-                    "type": "language",
-                    "approved": True,
-                    "original": original_text,
-                    "repaired": proposed_text,
-                }
-                repair_log.append(repair_entry)
-                self.bus.emit(DeliveryEvent(
-                    event_type=EventType.QC_REPAIRED,
-                    delivery_id=delivery_id,
-                    language=language,
-                    details=repair_entry,
-                ))
-                resolved_language_findings.append(finding)
-            else:
-                repair_log.append({
-                    "rule": rule,
-                    "rule_ref": rule_ref,
-                    "cue_index": cue_index,
-                    "type": "language",
-                    "approved": False,
-                    "status": decision,
-                    "original": original_text,
-                    "proposed": proposed_text,
-                })
-                unresolved_findings.append(finding)
+            return decision, item, finding, original_text, proposed_text, rule_ref
+            
+        if pending_items:
+            results = await asyncio.gather(*[_wait_for_one(info) for info in pending_items])
+            for decision, item, finding, original_text, proposed_text, rule_ref in results:
+                cue_index = finding.get("cue_index", 0)
+                rule = finding.get("rule", "")
+                if decision == "approved":
+                    new_lines = proposed_text.split("\n")
+                    idx_c = next((i for i, c in enumerate(cues) if c.index == cue_index), None)
+                    if idx_c is not None:
+                        cues[idx_c] = cues[idx_c].model_copy(update={"lines": new_lines})
+                    repair_entry = {
+                        "rule": rule,
+                        "rule_ref": rule_ref,
+                        "cue": cue_index,
+                        "cue_index": cue_index,
+                        "type": "language",
+                        "approved": True,
+                        "original": original_text,
+                        "repaired": proposed_text,
+                    }
+                    repair_log.append(repair_entry)
+                    self.bus.emit(DeliveryEvent(
+                        event_type=EventType.QC_REPAIRED,
+                        delivery_id=delivery_id,
+                        language=language,
+                        details=repair_entry,
+                    ))
+                    resolved_language_findings.append(finding)
+                else:
+                    repair_log.append({
+                        "rule": rule,
+                        "rule_ref": rule_ref,
+                        "cue_index": cue_index,
+                        "type": "language",
+                        "approved": False,
+                        "status": decision,
+                        "original": original_text,
+                        "proposed": proposed_text,
+                    })
+                    unresolved_findings.append(finding)
 
         # Rebuild the SubtitleFile with repaired cues
         repaired_file = subtitle_file.model_copy(update={"cues": cues})
