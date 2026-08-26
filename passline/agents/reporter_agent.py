@@ -77,13 +77,29 @@ class ReporterAgent(BaseAgent):
 
         # Produce repaired bytes via the existing writer
         repaired_bytes = b""
+        cue_count = 0
         if subtitle_file_dict is not None:
             try:
                 subtitle_file = SubtitleFile.model_validate(subtitle_file_dict)
+                cue_count = len(subtitle_file.cues)
+                if cue_count == 0:
+                    all_findings.append({
+                        "rule": "no_content",
+                        "cue_index": 0,
+                        "severity": "ERROR",
+                        "explanation": "No parseable cues found. Nothing to certify.",
+                    })
                 repaired_bytes = write_srt(subtitle_file)
                 log.debug("ReporterAgent: wrote %d repaired bytes", len(repaired_bytes))
             except Exception as exc:
                 log.error("ReporterAgent: write_srt failed — %s", exc)
+        else:
+            all_findings.append({
+                "rule": "no_content",
+                "cue_index": 0,
+                "severity": "ERROR",
+                "explanation": "No parseable cues found. Nothing to certify.",
+            })
 
         # Verdict: green if no remaining errors, red otherwise
         remaining = len(all_findings)
@@ -94,6 +110,7 @@ class ReporterAgent(BaseAgent):
             "delivery_id": delivery_id,
             "language": language,
             "verdict": verdict,
+            "cue_count": cue_count,
             "violations_found": {
                 "timing": len(timing_findings),
                 "format": len(format_findings),
