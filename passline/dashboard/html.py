@@ -18,8 +18,8 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
   --border:  #1c2130;
   --border2: #252d3d;
   --text:    #c8d0e0;
-  --muted:   #5a6478;
-  --dim:     #3a4255;
+  --muted:   #8b9bb4;
+  --dim:     #76839a;
   --red:     #ff3b3b;
   --amber:   #f5a623;
   --green:   #00d26a;
@@ -198,7 +198,7 @@ input[type=file]{display:none}
 }
 /* OBJ-3: HOLD uses amber, not red, so badge-failed (red) is unambiguously different */
 .badge-hold{background:var(--amber-dim);color:var(--amber);border:1px solid rgba(245,166,35,.4)}
-.badge-repairing{background:var(--amber-dim);color:var(--amber);border:1px solid rgba(245,166,35,.3)}
+.badge-repairing{background:rgba(155,114,255,.12);color:var(--violet);border:1px solid rgba(155,114,255,.3)}
 .badge-cleared{background:var(--green-dim);color:var(--green);border:1px solid rgba(0,210,106,.3)}
 .badge-pending{background:rgba(74,158,255,.08);color:var(--blue);border:1px solid rgba(74,158,255,.2)}
 /* OBJ-3: honest-fail badge — saturated crimson (#dc2626), visually distinct from amber HOLD */
@@ -1248,7 +1248,7 @@ async function showApproval(item) {
   const confPct = Math.round((item.confidence || 0) * 100);
 
   sub.innerHTML = `
-    <div style="font-family:var(--mono);color:var(--text-dim);margin-bottom:8px;">
+    <div style="font-family:var(--mono);color:var(--dim);margin-bottom:8px;">
       Delivery ${esc(item.delivery_id)} · Cue ${item.cue_index}
     </div>
     <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px;font-family:var(--mono);" dir="${lang === 'fa' || lang === 'fa-IR' || lang === 'fa-ir' ? 'rtl' : 'ltr'}">
