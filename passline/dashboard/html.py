@@ -897,7 +897,7 @@ async function markCleared(ev) {
       const resp = await fetch(`/api/download/${encodeURIComponent(ev.delivery_id)}`);
       if (resp.ok) {
         const srtText = await resp.text();
-        const vttText = "WEBVTT\n\n" + srtText.replace(/,/g, '.');
+        const vttText = "WEBVTT\n\n" + srtText.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
         const blob = new Blob([vttText], {type: 'text/vtt'});
         const url = URL.createObjectURL(blob);
         const video = document.getElementById(`vid-${CSS.escape(ev.delivery_id)}`);
