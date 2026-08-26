@@ -1,12 +1,20 @@
 import pytest
 from fastapi.testclient import TestClient
-from passline.dashboard.app import app
 import asyncio
 from unittest.mock import patch, MagicMock, AsyncMock
 
 @pytest.fixture
-def client():
-    return TestClient(app)
+def isolated_app():
+    from passline.dashboard.app import app
+    from passline.origination.orchestrator import cancel_all_jobs
+    cancel_all_jobs()
+    yield app
+    cancel_all_jobs()
+
+@pytest.fixture
+def client(isolated_app):
+    with TestClient(isolated_app) as c:
+        yield c
 
 def test_originate_rejects_unsupported_mime(client):
     response = client.post("/api/originate", data={"source_language": "en"}, files={"file": ("test.txt", b"hello", "text/plain")})
@@ -40,18 +48,25 @@ def test_originate_submits_all_target_languages(mock_run, mock_translate, mock_t
     response = client.post("/api/originate", data={"source_language": "en"}, files={"file": ("test.webm", b"hello", "audio/webm")})
     assert response.status_code == 202
     
+@pytest.fixture
+def isolated_loop():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    yield loop
+    loop.close()
+
 @patch("passline.origination.orchestrator.asyncio.sleep", new_callable=AsyncMock)
 @patch("passline.origination.orchestrator.transcribe_media", new_callable=AsyncMock)
 @patch("passline.origination.orchestrator.translate_cues", new_callable=AsyncMock)
 @patch("passline.origination.orchestrator.PipelineRunner.run_delivery", new_callable=AsyncMock)
-def test_originate_submits_and_handoff_language(mock_run, mock_translate, mock_transcribe, mock_sleep):
+def test_originate_submits_and_handoff_language(mock_run, mock_translate, mock_transcribe, mock_sleep, isolated_app, isolated_loop):
     mock_transcribe.return_value = []
     from passline.models.subtitle import SubtitleFile
     mock_translate.return_value = SubtitleFile(cues=tuple(), language="en", parse_anomalies=tuple())
     
-    from fastapi.testclient import TestClient
-    from passline.dashboard.app import app
-    with TestClient(app) as test_client:
+    # We must run TestClient within this isolated loop
+    # TestClient internally tries to create an event loop if not present, but since we set it, it uses ours.
+    with TestClient(isolated_app) as test_client:
         response = test_client.post("/api/originate", data={"source_language": "en"}, files={"file": ("test.webm", b"hello", "audio/webm")})
         assert response.status_code == 202
         job_id = response.json()["job_id"]

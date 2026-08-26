@@ -157,19 +157,7 @@ async def _call_genai_with_retry(
         return await _call()
 
     except Exception:
-        # If tenacity not available or other error, try once without retry
-        config = types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=LanguageCheckerOutput,
-            system_instruction=_SYSTEM_PROMPT,
-        )
-        response = await client.aio.models.generate_content(
-            model=model,
-            contents=prompt,
-            config=config,
-        )
-        raw = json.loads(response.text)
-        return LanguageCheckerOutput.model_validate(raw)
+        raise
 
 
 class LanguageCheckerAgent(BaseAgent):
@@ -255,7 +243,13 @@ class LanguageCheckerAgent(BaseAgent):
                     return res.flags if res else []
                 except Exception as exc:
                     log.warning("LanguageCheckerAgent batch failed: %s", exc)
-                    return []
+                    from passline.agents.language_checker import LanguageFlag
+                    return [LanguageFlag(
+                        cue_index=cues_batch[0].index if cues_batch else 0,
+                        rule_ref="language_check_unavailable",
+                        confidence=0.0,
+                        explanation="Language check unavailable due to API failure.",
+                    )]
 
             tasks = [process_batch(b) for b in batches]
             completed = 0
@@ -278,6 +272,13 @@ class LanguageCheckerAgent(BaseAgent):
                 output_flags = output.flags if output else []
             except Exception as exc:
                 log.warning("LanguageCheckerAgent: LLM call failed — %s", exc)
+                from passline.agents.language_checker import LanguageFlag
+                output_flags = [LanguageFlag(
+                    cue_index=subtitle_file.cues[0].index if subtitle_file.cues else 0,
+                    rule_ref="language_check_unavailable",
+                    confidence=0.0,
+                    explanation="Language check unavailable due to API failure.",
+                )]
 
         findings: list[dict] = []
         for flag in output_flags:
