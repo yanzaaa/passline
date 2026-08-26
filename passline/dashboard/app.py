@@ -209,6 +209,15 @@ async def upload(file: UploadFile, background_tasks: BackgroundTasks) -> JSONRes
     filename = file.filename or "unknown"
     logger.info("file uploaded: %s — starting pipeline run", filename)
     srt_bytes = await file.read()
+    
+    from passline.io.srt import parse_srt
+    try:
+        sf = parse_srt(srt_bytes)
+        if not sf.cues:
+            return JSONResponse(status_code=422, content={"detail": "not a readable subtitle file"})
+    except Exception:
+        return JSONResponse(status_code=422, content={"detail": "not a readable subtitle file"})
+
     # Detect language from filename (e.g. tos-fr-broken.srt → fr)
     language = "und"
     lower = filename.lower()
@@ -434,8 +443,8 @@ async def briefing(delivery_id: str) -> Response:
         return Response(content=_briefing_cache[delivery_id], media_type="audio/wav")
 
     report = _delivery_metadata.get(delivery_id)
-    if not report:
-        raise HTTPException(status_code=404, detail="No metadata found for this delivery.")
+    if not report or report.get("verdict", "") in ("error", "unknown"):
+        raise HTTPException(status_code=409, detail="No completed QC result found for this delivery.")
 
     language_findings = report.get("language_findings", [])
 
