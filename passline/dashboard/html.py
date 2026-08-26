@@ -406,8 +406,8 @@ input[type=file]{display:none}
   margin-bottom:6px}
 .diff-before .diff-side-label{color:var(--red)}
 .diff-after .diff-side-label{color:var(--green)}
-.diff-text{font-family:var(--mono);font-size:11px;color:var(--text);line-height:1.5;
-  min-height:40px}
+.diff-text{font-family:var(--mono);font-size:14px;color:var(--text);line-height:1.5;
+  min-height:48px}
 
 /* ── Air-traffic log ─────────────────────────────────────────────────── */
 .log-feed{
