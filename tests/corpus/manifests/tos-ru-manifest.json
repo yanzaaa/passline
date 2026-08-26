@@ -9,11 +9,11 @@
       "cue_index": 2,
       "defect_type": "line_overflow",
       "rule": "line_too_long",
-      "threshold": 42,
+      "threshold": 39,
       "measured_value": 54.0,
       "severity": "ERROR",
       "category": "DETERMINISTIC",
-      "detail": "Cue 2: longest line=54 chars > 42"
+      "detail": "Cue 2: longest line=54 chars > 39"
     },
     {
       "cue_index": 4,
@@ -79,11 +79,11 @@
       "cue_index": 44,
       "defect_type": "line_overflow",
       "rule": "line_too_long",
-      "threshold": 42,
+      "threshold": 39,
       "measured_value": 60.0,
       "severity": "ERROR",
       "category": "DETERMINISTIC",
-      "detail": "Cue 44: longest line=60 chars > 42"
+      "detail": "Cue 44: longest line=60 chars > 39"
     },
     {
       "cue_index": 57,

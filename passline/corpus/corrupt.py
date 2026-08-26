@@ -319,9 +319,10 @@ def corrupt_file(
     rng = __import__("random").Random(seed)  # local seed, never touches global state
 
     # ── Resolve thresholds based on language ──────────────────────────────────
+    from passline.qc.thresholds import LINE_CHAR_MAX_OVERRIDES
     is_cjk = language.lower() in ("zh", "ja", "ko", "zh-tw", "zh-cn", "zh-hk", "zh-hant", "zh-hans")
     cps_threshold = CPS_VIOLATION_CJK if is_cjk else CPS_VIOLATION
-    line_char_threshold = LINE_CHAR_MAX_CJK if is_cjk else LINE_CHAR_MAX
+    line_char_threshold = LINE_CHAR_MAX_CJK if is_cjk else LINE_CHAR_MAX_OVERRIDES.get(language.lower(), LINE_CHAR_MAX)
 
     cues: list[SubtitleCue] = list(source.cues)
     injected_defects: list[DefectSpec] = []
@@ -562,9 +563,10 @@ def corrupt_demo(
         defects = {"cps_blowout", "line_overflow", "short_duration", "meaning_swap"}
 
     # ── Resolve thresholds based on language ──────────────────────────────────
+    from passline.qc.thresholds import LINE_CHAR_MAX_OVERRIDES
     is_cjk = language.lower() in ("zh", "ja", "ko", "zh-tw", "zh-cn", "zh-hk", "zh-hant", "zh-hans")
     cps_threshold = CPS_VIOLATION_CJK if is_cjk else CPS_VIOLATION
-    line_char_threshold = LINE_CHAR_MAX_CJK if is_cjk else LINE_CHAR_MAX
+    line_char_threshold = LINE_CHAR_MAX_CJK if is_cjk else LINE_CHAR_MAX_OVERRIDES.get(language.lower(), LINE_CHAR_MAX)
 
     rng = __import__("random").Random(seed)
 
