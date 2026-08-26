@@ -94,6 +94,8 @@ _DEMO_FILES: dict[str, str] = {
 
 # ── FastAPI application ───────────────────────────────────────────────────────
 app = FastAPI(title="Passline Mission Control", version="0.1.0")
+from fastapi.staticfiles import StaticFiles
+app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
 
 @app.get("/", response_class=HTMLResponse)

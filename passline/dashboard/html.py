@@ -409,6 +409,13 @@ input[type=file]{display:none}
 .diff-text{font-family:var(--mono);font-size:14px;color:var(--text);line-height:1.5;
   min-height:48px}
 
+/* ── Video Preview ─────────────────────────────────────────────────────── */
+video { outline: none; }
+::cue { font-family: var(--font); font-size: 16px; background: rgba(0,0,0,0.8); color: white; }
+::cue(:lang(fa)) { direction: rtl; unicode-bidi: plaintext; }
+::cue(:lang(fa-IR)) { direction: rtl; unicode-bidi: plaintext; }
+::cue(:lang(fa-ir)) { direction: rtl; unicode-bidi: plaintext; }
+
 /* ── Air-traffic log ─────────────────────────────────────────────────── */
 .log-feed{
   flex:1;min-height:300px;
@@ -831,6 +838,9 @@ function addDeliveryCard(ev) {
     ${parentLabelHtml}
     <div class="dc-meta dc-lang">${esc(ev.language)} · ${d.cue_count || '?'} cues</div>
     <div class="progress-bar"><div class="progress-fill" id="prog-${CSS.escape(ev.delivery_id)}"></div></div>
+    <div class="video-preview" id="vid-container-${CSS.escape(ev.delivery_id)}" style="display:none; margin-top:12px; border:1px solid var(--border); border-radius:var(--r); overflow:hidden; background:#000;">
+      <video id="vid-${CSS.escape(ev.delivery_id)}" src="/static/tos-excerpt.mp4" controls crossorigin playsinline preload="none" style="width:100%; display:block;"></video>
+    </div>
   `;
   document.getElementById('delivery-cards').prepend(el);
   deliveries[ev.delivery_id] = { violations: 0, repairs: 0, status: 'submitted', language: ev.language };
@@ -879,6 +889,29 @@ function markCleared(ev) {
   if (card)  { card.className  = card.className.replace('pending', '').replace('repairing', '').replace('hold', '') + ' cleared'; }
   if (badge) { badge.className = 'status-badge badge-cleared'; badge.textContent = 'CLEARED FOR DELIVERY'; }
   if (prog)  { prog.style.width = '100%'; prog.style.background = 'var(--green)'; }
+  // Load preview subtitles
+  const vidContainer = document.getElementById(`vid-container-${CSS.escape(ev.delivery_id)}`);
+  if (vidContainer) {
+    try {
+      const resp = await fetch(`/api/download/${encodeURIComponent(ev.delivery_id)}`);
+      if (resp.ok) {
+        const srtText = await resp.text();
+        const vttText = "WEBVTT\n\n" + srtText.replace(/,/g, '.');
+        const blob = new Blob([vttText], {type: 'text/vtt'});
+        const url = URL.createObjectURL(blob);
+        const video = document.getElementById(`vid-${CSS.escape(ev.delivery_id)}`);
+        const track = document.createElement('track');
+        track.kind = 'subtitles';
+        track.label = ev.language || 'Subtitles';
+        track.srclang = ev.language ? ev.language.toLowerCase() : 'en';
+        track.src = url;
+        track.default = true;
+        video.appendChild(track);
+        vidContainer.style.display = 'block';
+      }
+    } catch(e) { console.warn("Could not load preview subtitles", e); }
+  }
+
   // Append a download link for the repaired SRT file if repaired_file_exists is true
   if (card && ev.details && ev.details.repaired_file_exists === true && !card.classList.contains('is-replay')) {
     const existing = card.querySelector('.download-link');
