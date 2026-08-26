@@ -1403,8 +1403,16 @@ async function triggerDemo(id, lang) {
     const fd = new FormData();
     fd.append('file', file);
     const uploadResp = await fetch('/api/upload', {method: 'POST', body: fd});
-    if (!uploadResp.ok) console.warn('demo upload failed', uploadResp.status);
-    else {
+    if (!uploadResp.ok) {
+        console.warn('demo upload failed', uploadResp.status);
+        if (uploadResp.status === 422) {
+            const label = document.querySelector('.dropzone-label');
+            if (label) {
+                label.textContent = '❌ Not a readable subtitle file';
+                label.style.color = 'var(--amber)';
+            }
+        }
+    } else {
       const data = await uploadResp.json();
       console.log('demo pipeline started', data);
     }
@@ -1464,8 +1472,20 @@ function handleFile(file) {
   const fd = new FormData();
   fd.append('file', file);
   fetch('/api/upload', {method:'POST', body: fd})
-    .then(r => r.json())
-    .then(data => console.log('pipeline started', data))
+    .then(async r => {
+      if (!r.ok) {
+        if (r.status === 422) {
+          label.textContent = '❌ Not a readable subtitle file';
+          label.style.color = 'var(--amber)';
+        } else {
+          label.textContent = `❌ Upload failed: ${r.status}`;
+          label.style.color = 'var(--amber)';
+        }
+        return null;
+      }
+      return r.json();
+    })
+    .then(data => { if (data) console.log('pipeline started', data); })
     .catch(e => console.warn('upload failed', e));
 }
 
