@@ -64,17 +64,20 @@ class OriginationJob:
             from passline.events.bus import DeliveryEvent, EventType
             
             timeout_s = float(os.getenv("PASSLINE_PIPELINE_TIMEOUT", "240.0"))
-            try:
-                await asyncio.wait_for(
-                    runner.run_delivery(
-                        srt_bytes=srt_bytes,
-                        language=lang,
-                        delivery_id=delivery_id,
-                        parent_id=self.job_id
-                    ),
-                    timeout=timeout_s
+            
+            pipeline_task = asyncio.create_task(
+                runner.run_delivery(
+                    srt_bytes=srt_bytes,
+                    language=lang,
+                    delivery_id=delivery_id,
+                    parent_id=self.job_id
                 )
-            except asyncio.TimeoutError:
+            )
+            
+            done, pending = await asyncio.wait([pipeline_task], timeout=timeout_s)
+            
+            if pending:
+                pipeline_task.cancel()
                 logger.error(f"Delivery {delivery_id} for {lang} timed out in orchestrator")
                 session_id = f"delivery-{delivery_id}"
                 session = await runner._session_service.get_session(
@@ -101,6 +104,33 @@ class OriginationJob:
                     language=lang,
                     details=report,
                 ))
+            else:
+                try:
+                    report = pipeline_task.result()
+                    if not report or report.get("verdict") in (None, "unknown"):
+                        self.bus.emit(DeliveryEvent(
+                            event_type=EventType.DELIVERY_FAILED,
+                            delivery_id=delivery_id,
+                            language=lang,
+                            details={
+                                "delivery_id": delivery_id,
+                                "language": lang,
+                                "verdict": "failed",
+                                "error": "no_verdict",
+                            }
+                        ))
+                except Exception as ex:
+                    self.bus.emit(DeliveryEvent(
+                        event_type=EventType.DELIVERY_FAILED,
+                        delivery_id=delivery_id,
+                        language=lang,
+                        details={
+                            "delivery_id": delivery_id,
+                            "language": lang,
+                            "verdict": "failed",
+                            "error": str(ex),
+                        }
+                    ))
 
         except Exception as e:
             logger.exception(f"Failed to process language {lang}")
