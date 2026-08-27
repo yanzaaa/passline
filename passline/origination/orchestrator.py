@@ -92,7 +92,7 @@ class OriginationJob:
                     "delivery_id": delivery_id,
                     "language": lang,
                     "verdict": "failed",
-                    "error": "timeout",
+                    "reason": "timeout",
                     "violations_found": {
                         "remaining_after_repair": len(all_findings),
                     },
@@ -116,7 +116,7 @@ class OriginationJob:
                                 "delivery_id": delivery_id,
                                 "language": lang,
                                 "verdict": "failed",
-                                "error": "no_verdict",
+                                "reason": "no_verdict",
                             }
                         ))
                 except Exception as ex:
@@ -128,7 +128,7 @@ class OriginationJob:
                             "delivery_id": delivery_id,
                             "language": lang,
                             "verdict": "failed",
-                            "error": str(ex),
+                            "reason": str(ex),
                         }
                     ))
 
